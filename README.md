@@ -622,7 +622,45 @@ gzip -dc /mnt/backup/db-20260821-030000.sql.gz   | docker compose exec -T postgr
 **备份文件本身是敏感的**：里面有 bcrypt 密码哈希、邮箱地址、以及推送用的
 VAPID 私钥。脚本已经把目录设成 700、文件设成 600；要传到别处请先加密。
 
-### 23. 配置你的 nginx
+### 23. 迁移到别的服务器
+
+导出（在**旧**机器上）：
+
+```bash
+./scripts/backup.sh /tmp/migration          # db-*.sql.gz + uploads-*.tar.gz
+```
+
+或者用一次性的完整 dump（迁移场景更直观，文件名固定）：
+
+```bash
+mkdir -p /tmp/migration
+docker compose exec -T postgres pg_dump -U mealplanner -d mealplanner \
+  --no-owner --no-privileges --clean --if-exists > /tmp/migration/mealplanner.sql
+docker run --rm -v meal-planner_uploads:/from -v /tmp/migration:/to alpine \
+  tar czf /to/uploads.tar.gz -C /from .
+cp scripts/restore.sh /tmp/migration/
+```
+
+恢复（在**新**机器上，服务已经部署起来之后）：
+
+```bash
+./scripts/restore.sh /path/to/migration           # 先看计划，输 yes
+./scripts/restore.sh /path/to/migration -y        # 跳过确认
+./scripts/restore.sh /path/to/migration -y --force  # 目标库已有数据也覆盖
+```
+
+`restore.sh` **只用 `docker` 命令**，compose 和 swarm 都能跑：它按名字找在跑的
+postgres 容器（swarm 是 `<stack>_postgres.1.xxx`，compose 是 `<项目>-postgres-1`），
+按 `*_uploads` 找卷，都能用 `PG_CONTAINER=` / `UPLOADS_VOLUME=` 覆盖。
+
+两道保险：不加 `-y` 会先打印计划等你确认；目标库里已经有用户时直接拒绝，
+要覆盖得显式 `--force`。
+
+**不要直接拷 pgdata 目录搬过去** —— 那是平台相关的物理格式。这个 demo 的数据目录是
+aarch64 + musl 写的，搬到 x86_64 上可能起不来，或者"能起来但索引排序悄悄不对"。
+SQL dump 是纯文本，跨架构安全。
+
+### 24. 配置你的 nginx
 
 参考项目里的 `nginx-example.conf`，核心是把 `meal.xxx.fr` 反向代理到
 `127.0.0.1:8080`。记得转发 `X-Forwarded-Proto` 这个头，后端要靠它判断
@@ -670,7 +708,9 @@ meal-planner/
 ├── Dockerfile               多阶段构建：编译前端 + 打包后端
 ├── docker-compose.portainer.yml  Portainer Web editor 用的变体（用现成镜像）
 ├── docker-stack.yml         Docker Swarm 用的 stack 文件
-├── scripts/backup.sh        备份：pg_dump + 图片打包，自带校验和保留策略
+├── scripts/
+│   ├── backup.sh            备份：pg_dump + 图片打包，自带校验和保留策略
+│   └── restore.sh           恢复/迁移：只用 docker 命令，compose 和 swarm 都能跑
 ├── nginx-example.conf       给你宿主机 nginx 参考的反向代理配置
 ├── .env.example             docker compose 用的环境变量
 ├── server/                  后端
