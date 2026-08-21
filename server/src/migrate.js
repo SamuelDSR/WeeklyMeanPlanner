@@ -1,0 +1,299 @@
+// 极简迁移机制：每条迁移只跑一次，跑过的名字记在 schema_migrations 表里。
+//
+// 新建的库由 schema.sql 一次建成最新结构，并把已有迁移名预先写进 schema_migrations，
+// 所以下面的 SQL 只会在"升级一个已经存在的库"时真正执行：
+//
+//   新库   schema.sql（最新结构 + 迁移基线）  ->  migrate 无事可做
+//   老库   已有结构                          ->  migrate 补上缺的列
+import { pool } from './db.js';
+
+// 同一个库上如果同时启动了多个实例，用这把咨询锁保证迁移串行执行
+const MIGRATION_LOCK_ID = 728341;
+
+const MIGRATIONS = [
+  {
+    name: '001_user_approval',
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS status      TEXT NOT NULL DEFAULT 'pending';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin    BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS approved_by INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+      -- 升级前就存在的用户一律视为已通过审核，否则升级完老用户会被关在门外
+      UPDATE users SET status = 'approved', approved_at = COALESCE(approved_at, now())
+       WHERE status = 'pending';
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_status_check') THEN
+          ALTER TABLE users ADD CONSTRAINT users_status_check
+            CHECK (status IN ('pending', 'approved', 'rejected'));
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_users_status ON users(status);
+    `,
+  },
+  {
+    name: '002_recipe_thumb',
+    sql: `
+      -- 缩略图地址。老数据是 NULL，前端会退回用主图，不会显示不出来。
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS thumb_url TEXT;
+    `,
+  },
+  {
+    name: '003_servings_multi_dish_step_photos',
+    sql: `
+      -- 一份菜谱做出来够几个人吃
+      ALTER TABLE recipes  ADD COLUMN IF NOT EXISTS servings     INTEGER NOT NULL DEFAULT 4;
+      -- 家里几口人：菜单换算成"要做几份"时要用
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS member_count INTEGER NOT NULL DEFAULT 2;
+      -- 步骤配图
+      ALTER TABLE steps    ADD COLUMN IF NOT EXISTS photo_url    TEXT;
+      ALTER TABLE steps    ADD COLUMN IF NOT EXISTS thumb_url    TEXT;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recipes_servings_check') THEN
+          ALTER TABLE recipes ADD CONSTRAINT recipes_servings_check CHECK (servings >= 1);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'families_member_count_check') THEN
+          ALTER TABLE families ADD CONSTRAINT families_member_count_check CHECK (member_count >= 1);
+        END IF;
+      END $$;
+
+      -- 一格一道菜的限制去掉：现在一顿可以配好几道菜。
+      -- 空格子不再用 recipe_id IS NULL 的行表示，而是干脆没有行。
+      ALTER TABLE menu_slots DROP CONSTRAINT IF EXISTS menu_slots_weekly_menu_id_date_meal_slot_key;
+      DELETE FROM menu_slots WHERE recipe_id IS NULL;
+
+      -- 菜谱被删掉时，它占的格子直接消失（以前会留一行 recipe_id = NULL）
+      ALTER TABLE menu_slots DROP CONSTRAINT IF EXISTS menu_slots_recipe_id_fkey;
+      ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_recipe_id_fkey
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE;
+      ALTER TABLE menu_slots ALTER COLUMN recipe_id SET NOT NULL;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'menu_slots_slot_recipe_key') THEN
+          -- 同一格里同一道菜不重复（想多做点是调菜谱的"份数"，不是加两遍）
+          ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_slot_recipe_key
+            UNIQUE (weekly_menu_id, date, meal_slot, recipe_id);
+        END IF;
+      END $$;
+    `,
+  },
+  {
+    name: '004_family_owner',
+    sql: `
+      -- 家庭的创建者：只有他（和应用管理员）能改家庭设置、踢人、换邀请码
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS owner_id INTEGER REFERENCES users(id) ON DELETE SET NULL;
+
+      -- 升级前建的家庭没有记创建者，把最早加入的成员当作创建者
+      UPDATE families f
+         SET owner_id = (SELECT u.id FROM users u WHERE u.family_id = f.id ORDER BY u.id LIMIT 1)
+       WHERE f.owner_id IS NULL;
+    `,
+  },
+  {
+    name: '005_store_bought',
+    sql: `
+      -- 买现成的（熟食/半成品）：不用做，直接买。
+      -- 它的"食材"就只有它自己一行，记着一份要买多少（1 盒 / 500 g / 2 个…），
+      -- 这样份数换算和购物清单合并都能直接复用，不用另开一套逻辑。
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS is_store_bought BOOLEAN NOT NULL DEFAULT false;
+    `,
+  },
+  {
+    name: '006_eat_out_history_ratings',
+    sql: `
+      -- 「出去吃」：这一格不做饭，也不进购物清单。
+      -- 它是一行 recipe_id 为空、is_eat_out 为真的记录。
+      ALTER TABLE menu_slots ALTER COLUMN recipe_id DROP NOT NULL;
+      ALTER TABLE menu_slots ADD COLUMN IF NOT EXISTS is_eat_out BOOLEAN NOT NULL DEFAULT false;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'menu_slots_entry_check') THEN
+          -- 一行要么是一道菜，要么是「出去吃」，不会两者都是或都不是
+          ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_entry_check CHECK (
+            (is_eat_out AND recipe_id IS NULL) OR (NOT is_eat_out AND recipe_id IS NOT NULL)
+          );
+        END IF;
+      END $$;
+
+      -- 一格最多一个「出去吃」标记（recipe_id 为 NULL 时那个 UNIQUE 约束管不住）
+      CREATE UNIQUE INDEX IF NOT EXISTS menu_slots_eat_out_key
+        ON menu_slots (weekly_menu_id, date, meal_slot) WHERE is_eat_out;
+
+      -- 确认菜单（「这周就这么吃」）。确认过的周才算历史。
+      ALTER TABLE weekly_menus ADD COLUMN IF NOT EXISTS confirmed_at TIMESTAMPTZ;
+
+      -- 健康分 / 喜好分：1-5，NULL = 还没评
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS health_score SMALLINT;
+      ALTER TABLE recipes ADD COLUMN IF NOT EXISTS like_score   SMALLINT;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recipes_health_score_check') THEN
+          ALTER TABLE recipes ADD CONSTRAINT recipes_health_score_check
+            CHECK (health_score IS NULL OR health_score BETWEEN 1 AND 5);
+        END IF;
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'recipes_like_score_check') THEN
+          ALTER TABLE recipes ADD CONSTRAINT recipes_like_score_check
+            CHECK (like_score IS NULL OR like_score BETWEEN 1 AND 5);
+        END IF;
+      END $$;
+
+      CREATE INDEX IF NOT EXISTS idx_weekly_menus_family_week ON weekly_menus(family_id, week_start DESC);
+    `,
+  },
+  {
+    name: '007_meal_likes_history_survives',
+    sql: `
+      -- 1) 历史要活下来：删一道菜不能把过去几周的记录一起带走。
+      --    办法是在格子上存一份菜名快照，菜谱删了也知道那天吃的是什么。
+      ALTER TABLE menu_slots ADD COLUMN IF NOT EXISTS recipe_name TEXT;
+      UPDATE menu_slots ms
+         SET recipe_name = r.name
+        FROM recipes r
+       WHERE r.id = ms.recipe_id AND ms.recipe_name IS NULL;
+
+      -- 判断"这行是一道菜"从此看菜名快照，而不是看 recipe_id ——
+      -- 不然 ON DELETE SET NULL 把 recipe_id 清空时会撞上原来的 CHECK，导致删菜谱直接失败
+      ALTER TABLE menu_slots DROP CONSTRAINT IF EXISTS menu_slots_entry_check;
+      ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_entry_check CHECK (
+        (is_eat_out AND recipe_id IS NULL AND recipe_name IS NULL)
+        OR (NOT is_eat_out AND recipe_name IS NOT NULL)
+      );
+
+      ALTER TABLE menu_slots DROP CONSTRAINT IF EXISTS menu_slots_recipe_id_fkey;
+      ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_recipe_id_fkey
+        FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE SET NULL;
+
+      -- 2) 喜好分挪到"这一顿"上。菜谱上的 like_score 保留，当默认值用：
+      --    这一顿没单独评过，就用菜谱上的。
+      ALTER TABLE menu_slots ADD COLUMN IF NOT EXISTS like_score SMALLINT;
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'menu_slots_like_score_check') THEN
+          ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_like_score_check
+            CHECK (like_score IS NULL OR like_score BETWEEN 1 AND 5);
+        END IF;
+      END $$;
+    `,
+  },
+  {
+    name: '008_health_snapshot_drop_soup_slot',
+    sql: `
+      -- 健康分快照：菜谱被删掉之后，历史里也还知道那顿吃得健不健康。
+      -- 菜谱还在的时候以菜谱上的为准（健康程度是菜本身的属性，改了应该全局生效），
+      -- 快照只是删掉之后的兜底。
+      ALTER TABLE menu_slots ADD COLUMN IF NOT EXISTS health_score SMALLINT;
+      UPDATE menu_slots ms
+         SET health_score = r.health_score
+        FROM recipes r
+       WHERE r.id = ms.recipe_id AND ms.health_score IS NULL;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'menu_slots_health_score_check') THEN
+          ALTER TABLE menu_slots ADD CONSTRAINT menu_slots_health_score_check
+            CHECK (health_score IS NULL OR health_score BETWEEN 1 AND 5);
+        END IF;
+      END $$;
+
+      -- 去掉「汤羹」这个餐次：表单里从来没提供过它当餐次（只有早/午/晚），
+      -- 所以这些格子一直是空的。「汤羹」作为菜品分类保留不动。
+      DELETE FROM menu_slots WHERE meal_slot = '汤羹';
+      UPDATE recipes SET meals = array_remove(meals, '汤羹') WHERE '汤羹' = ANY(meals);
+    `,
+  },
+  {
+    name: '009_family_timezone',
+    sql: `
+      -- 「本周」是哪一周取决于时区：容器跑在 UTC，但家在巴黎。
+      -- 没有这个设置的话，UTC 时间周一凌晨 00:30（巴黎已是周一 02:30）算哪一周都可能错。
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Paris';
+    `,
+  },
+  {
+    name: '010_notifications',
+    sql: `
+      -- 每顿饭的钟点（家庭设置）。做成 JSONB 而不是三列：
+      -- 餐次本来就是一组可变的键，加一顿"下午茶"不用再改表。
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS meal_times JSONB
+        NOT NULL DEFAULT '{"早餐":"08:00","午餐":"12:00","晚餐":"19:00"}'::jsonb;
+      -- 通知总开关 + 提前多久（分钟）。默认关：不该有人被没同意过的推送吵到。
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS notify_enabled BOOLEAN NOT NULL DEFAULT false;
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS notify_lead_minutes INTEGER NOT NULL DEFAULT 60;
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'families_notify_lead_check') THEN
+          ALTER TABLE families ADD CONSTRAINT families_notify_lead_check
+            CHECK (notify_lead_minutes BETWEEN 0 AND 1440);
+        END IF;
+      END $$;
+
+      -- 浏览器推送订阅：一台设备一条。endpoint 是浏览器厂商推送服务给的地址，
+      -- 唯一，而且会失效（用户撤权限、清数据、删掉主屏图标…），失效时推送会返回
+      -- 410/404，那时要把这一行删掉。
+      CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id           SERIAL PRIMARY KEY,
+        user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        endpoint     TEXT NOT NULL UNIQUE,
+        p256dh       TEXT NOT NULL,
+        auth         TEXT NOT NULL,
+        user_agent   TEXT,
+        created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+        last_sent_at TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+
+      -- 已发过的提醒。定时器每分钟跑一次、进程可能重启，
+      -- 靠这张表保证"同一顿饭只提醒一次"。
+      CREATE TABLE IF NOT EXISTS notification_log (
+        id         SERIAL PRIMARY KEY,
+        family_id  INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        date       DATE NOT NULL,
+        meal_slot  TEXT NOT NULL,
+        sent_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+        UNIQUE (family_id, date, meal_slot)
+      );
+
+      -- 一点点全局配置（目前只放自动生成的 VAPID 密钥对）
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key   TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `,
+  },
+];
+
+async function isApplied(client, name) {
+  const { rows } = await client.query('SELECT 1 FROM schema_migrations WHERE name = $1', [name]);
+  return rows.length > 0;
+}
+
+export async function runMigrations() {
+  const client = await pool.connect();
+  try {
+    await client.query('SELECT pg_advisory_lock($1)', [MIGRATION_LOCK_ID]);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS schema_migrations (
+        name       TEXT PRIMARY KEY,
+        applied_at TIMESTAMPTZ NOT NULL DEFAULT now()
+      )
+    `);
+
+    for (const migration of MIGRATIONS) {
+      if (await isApplied(client, migration.name)) continue;
+
+      await client.query('BEGIN');
+      try {
+        await client.query(migration.sql);
+        await client.query('INSERT INTO schema_migrations (name) VALUES ($1)', [migration.name]);
+        await client.query('COMMIT');
+        console.log(`[migrate] 已应用迁移 ${migration.name}`);
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw new Error(`迁移 ${migration.name} 执行失败：${err.message}`);
+      }
+    }
+  } finally {
+    await client.query('SELECT pg_advisory_unlock($1)', [MIGRATION_LOCK_ID]).catch(() => {});
+    client.release();
+  }
+}

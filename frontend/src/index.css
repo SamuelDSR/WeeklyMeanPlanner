@@ -1,0 +1,57 @@
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700;900&family=Noto+Sans+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: #EEF1EF;
+  color: #22302B;
+  font-family: 'Noto Sans SC', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 减少动效偏好 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* 键盘可见焦点 */
+:focus-visible {
+  outline: 2px solid #2C4A6B;
+  outline-offset: 2px;
+}
+
+/* ---------- 手机适配 ---------- */
+
+/* iOS Safari 在聚焦字号小于 16px 的输入框时，会把整个页面放大，而且不会自己缩回去。
+   所以表单里的文字输入一律 16px。<select> 不动：iOS 的 select 是弹原生选择器、
+   不会触发放大，而且食材那一行本来就挤，放大反而更难用。 */
+/* 注意特异性：Tailwind 的 .text-sm 是 (0,1,0)，光写 `textarea` 是 (0,0,1) 会被它压过去。
+   `:not([...])` 各加一个属性选择器，把两条都顶到 .text-sm 之上。 */
+input:not([type='checkbox']):not([type='radio']),
+textarea:not([hidden]) {
+  font-size: 16px;
+}
+
+/* iPhone X 之后底部有 home indicator。index.html 里是 viewport-fit=cover，
+   页面会铺到屏幕物理边缘，所以固定在底部的东西必须自己让开这块安全区。 */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+/* 页面内容要同时让开底部导航栏（约 4rem）和安全区 */
+.pb-nav {
+  padding-bottom: calc(6rem + env(safe-area-inset-bottom));
+}

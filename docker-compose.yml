@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mealplanner
+      POSTGRES_USER: mealplanner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 里设置 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 只在数据目录为空（第一次启动）时会自动执行这个脚本建表
+      - ./server/src/schema.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mealplanner -d mealplanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mealplanner:${POSTGRES_PASSWORD}@postgres:5432/mealplanner
+      JWT_SECRET: ${JWT_SECRET:?请在 .env 里设置一个随机字符串作为 JWT_SECRET}
+      NODE_ENV: production
+      PORT: 3000
+      # 应用本身跑在你自己的 nginx 反向代理后面，nginx 负责 TLS 终止，
+      # 这里 cookie 的 secure 标志设成 true，配合 nginx 转发 X-Forwarded-Proto 使用。
+      # 想不经过 nginx、直接用 http 访问来调试时，在 .env 里设 COOKIE_SECURE=false
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # 管理员账号的邮箱：这个邮箱注册时会自动成为管理员并直接通过审核。
+      # 留空的话，数据库里第一个注册的账号自动成为管理员。
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      # 只暴露给宿主机本地，你的 nginx 反向代理 meal.xxx.fr -> 127.0.0.1:8080
+      - "127.0.0.1:8080:3000"
+
+volumes:
+  pgdata:
+  uploads:
