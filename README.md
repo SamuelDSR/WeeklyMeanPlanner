@@ -518,6 +518,20 @@ app_settings         key/value —— 目前只放自动生成的 VAPID 密钥
 出来的是 `linux/arm64`，x86_64 的服务器跑不了。要么在目标机上 build，
 要么用 buildx 出 amd64 推到 registry。
 
+#### 如果你的 Docker 是 Swarm 模式
+
+Portainer 在 Swarm 模式下的 Stack 走的是 `docker stack deploy`，**会忽略 compose 里的一批键**，
+所以别直接用 `docker-compose.yml`，用 `docker-stack.yml`：
+
+| compose | swarm |
+|---|---|
+| `build:` | 忽略 → 先建好镜像，用 `API_IMAGE` 指定 |
+| `depends_on: service_healthy` | 忽略 → 应用启动时会重试等数据库（见 `waitForDatabase`） |
+| `restart: unless-stopped` | 忽略 → `deploy.restart_policy` |
+| `ports: "127.0.0.1:8080:3000"` | 不支持限制到 127.0.0.1，见 `docker-stack.yml` 里的 ⚠️ |
+
+`docker-stack.yml` 用 `docker stack config -c docker-stack.yml` 校验过。
+
 #### 方式 A：Repository 类型 Stack（推荐）
 
 Portainer 自己把仓库 clone 到宿主机，然后在那个目录里跑 compose ——
@@ -655,6 +669,7 @@ meal-planner/
 ├── docker-compose.yml       服务编排：postgres + api
 ├── Dockerfile               多阶段构建：编译前端 + 打包后端
 ├── docker-compose.portainer.yml  Portainer Web editor 用的变体（用现成镜像）
+├── docker-stack.yml         Docker Swarm 用的 stack 文件
 ├── scripts/backup.sh        备份：pg_dump + 图片打包，自带校验和保留策略
 ├── nginx-example.conf       给你宿主机 nginx 参考的反向代理配置
 ├── .env.example             docker compose 用的环境变量

@@ -1,0 +1,86 @@
+# Docker Swarm 用的 stack 文件（Portainer 里 Swarm 模式的 Stack 就是 docker stack deploy）。
+#
+# 和 docker-compose.yml 的区别，都是因为 **swarm 会忽略一批 compose 的键**：
+#
+#   build:        忽略  -> 必须用事先建好的镜像（见下面 API_IMAGE）
+#   depends_on:   忽略  -> 启动顺序没保证，所以 api 里加了等数据库的重试
+#   restart:      忽略  -> 改成 deploy.restart_policy
+#   ports 里的 127.0.0.1  不支持 -> 见下面那段 ⚠️
+#
+# 部署：
+#   1. 先建镜像（在这台机器上，或推到 registry）
+#        docker build -t meal-planner-api:1.0 .
+#   2. Portainer -> Stacks -> Add stack -> Web editor，贴这个文件
+#      环境变量填：POSTGRES_PASSWORD / JWT_SECRET / ADMIN_EMAIL / API_IMAGE
+#   3. schema.sql 放到宿主机（从零建库时要用；恢复 dump 的话可以删掉那行挂载）
+#        mkdir -p /srv/meal-planner && cp server/src/schema.sql /srv/meal-planner/
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: mealplanner
+      POSTGRES_USER: mealplanner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?在 Portainer 环境变量里设置}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 恢复 dump 的话这一行可以删掉：dump 里自带建表语句
+      - ${SCHEMA_SQL_PATH:-/srv/meal-planner/schema.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mealplanner -d mealplanner"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      # 数据库是有状态的，别让它在多节点之间飘（除非你用共享存储驱动）
+      placement:
+        constraints:
+          - node.role == manager
+
+  api:
+    image: ${API_IMAGE:?设置 API_IMAGE，例如 meal-planner-api:1.0}
+    environment:
+      DATABASE_URL: postgresql://mealplanner:${POSTGRES_PASSWORD}@postgres:5432/mealplanner
+      JWT_SECRET: ${JWT_SECRET:?在 Portainer 环境变量里设置}
+      NODE_ENV: production
+      PORT: 3000
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    volumes:
+      - uploads:/app/uploads
+      # 想换成本地路径方便备份就用这行（容器以 root 跑，不用改权限）：
+      # - /srv/meal-planner/uploads:/app/uploads
+    # ⚠️ swarm 不支持把发布端口限制在 127.0.0.1。
+    #    mode: host 会绕过 routing mesh 直接发布在节点上，但仍然是 0.0.0.0。
+    #    所以二选一：
+    #      A) nginx 跑在宿主机上 —— 保留下面这段，并且**一定**要用防火墙挡住 8080
+    #         （注意 docker 会自己写 iptables，ufw 可能挡不住 —— 用 DOCKER-USER 链）
+    #      B) 反向代理也是容器（Nginx Proxy Manager / Traefik）—— 把 ports 整段删掉，
+    #         改成加入代理所在的 overlay 网络，代理直接转发到 api:3000，一个端口都不暴露
+    ports:
+      - target: 3000
+        published: 8080
+        protocol: tcp
+        mode: host
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: any
+        delay: 5s
+      placement:
+        constraints:
+          - node.role == manager
+
+volumes:
+  pgdata:
+  uploads:
+
+# 方式 B 用的：代理容器所在的外部网络
+# networks:
+#   proxy:
+#     external: true

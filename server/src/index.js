@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import express from 'express';
+import { query } from './db.js';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import path from 'path';
@@ -78,8 +79,28 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 3000;
 
+// 等数据库可用。
+//
+// docker compose 里有 depends_on: service_healthy 保证顺序，但**swarm 会忽略它** ——
+// 在 swarm 里 api 很可能比 postgres 先起来。不等的话进程直接退出、被反复重启，
+// 日志里全是启动失败。这里退避重试，等到连上为止。
+async function waitForDatabase({ attempts = 30, delayMs = 2000 } = {}) {
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      await query('SELECT 1');
+      if (i > 1) console.log(`[db] 第 ${i} 次尝试连上了`);
+      return;
+    } catch (err) {
+      if (i === attempts) throw new Error(`数据库连不上（试了 ${attempts} 次）：${err.message}`);
+      if (i === 1) console.log('[db] 数据库还没就绪，等它起来…');
+      await new Promise((r) => setTimeout(r, delayMs));
+    }
+  }
+}
+
 // 先把数据库结构补到最新、确认管理员账号，再开始收请求
 async function start() {
+  await waitForDatabase();
   await runMigrations();
   await bootstrapAdmin();
   await initPush();
