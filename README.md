@@ -691,6 +691,23 @@ libc 不对）没有这个字段，于是报了个毫无关联的 TypeError，�
 **真正的原因几乎总是：镜像里的 sharp 原生库和运行平台不匹配。** 最常见的是
 在 Apple Silicon 上 build（arm64）然后跑在 x86_64 服务器上。
 
+#### 为什么报的是这个错
+
+看一眼 sharp 自己的代码（`sharp.mjs`，0.35.3）：
+
+```js
+errors.forEach((err) => {
+  if (!err.code.endsWith("MODULE_NOT_FOUND")) {   // err.code 可能是 undefined
+```
+
+它把每次加载失败都收进 `errors`，最后拼提示信息时假设**每个错误都有 `.code`**。
+动态库加载失败（比如把 glibc 编的库加载到 musl 上）抛出来的错误没有 `.code`，
+于是这一行自己崩了，把真正的 "Could not load the sharp module" 整段盖掉。
+
+所以：**报 TypeError 不代表缺包，代表找到了但加载不起来**。
+真的缺包时报的是另一句（`Cannot find package '@img/colour'`
+或 `Ensure optional dependencies can be installed`）。
+
 #### 先看真正的错误
 
 api 容器如果在反复重启，`docker exec` 进不去，用覆盖 entrypoint 的方式跑：
@@ -715,6 +732,39 @@ docker run --rm --entrypoint sh <你的镜像> -c '
 | arm64 | `aarch64` | `sharp-linuxmusl-arm64` + `sharp-libvips-linuxmusl-arm64` |
 
 看到的是 `arm64` 包却跑在 `x86_64` 上 —— 就是镜像建错了平台。
+
+#### 已经在目标机器上重建过、还是不行？
+
+那就不是平台建错了，而是**装上的 binding 和运行环境的 libc 不匹配** ——
+最常见的是 Alpine（musl）上装到了 glibc 版的包。绕过 sharp 那个坏掉的错误处理，
+直接加载 `.node` 文件，才能看到真正的原因：
+
+```bash
+docker run --rm --entrypoint sh <你的镜像> -c '
+  ls /app/node_modules/@img/
+  find /app/node_modules/@img -name "*.node"
+  node -e "require(\"/app/node_modules/@img/sharp-linuxmusl-x64/lib/sharp-linuxmusl-x64-0.35.3.node\")"
+'
+```
+
+真正的报错里出现什么，对应什么问题：
+
+| 关键词 | 说明 |
+|---|---|
+| `Error relocating` / `symbol not found` | glibc 的包跑在 musl 上（或反过来） |
+| `Error loading shared library ld-linux-x86-64.so.2` | 同上，glibc 的库在 Alpine 上 |
+| `wrong ELF class` / `Exec format error` | 架构不对（arm64 vs x64） |
+| 只有 `sharp-linux-x64`、没有 `sharp-linuxmusl-x64` | npm 没按 libc 选包（npm 太旧） |
+
+npm 没按 libc 选包时，显式指定平台重装：
+
+```bash
+npm install --include=optional --os=linux --cpu=x64 --libc=musl sharp
+```
+
+Dockerfile 里已经加了两道防线：`npm ci --omit=dev --include=optional`（防止
+optional 被跳过），以及**构建时就 `require('sharp')` 一次** —— 平台不匹配的话
+在 build 阶段就失败，而不是部署完容器反复重启才发现。arm64 和 amd64 都验证过能通过。
 
 #### 修
 
