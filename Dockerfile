@@ -1,5 +1,5 @@
 # ---------- 阶段一：构建前端静态文件 ----------
-FROM node:20-alpine AS frontend-build
+FROM node:20-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -7,7 +7,12 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---------- 阶段二：后端运行环境 ----------
-FROM node:20-alpine AS backend
+# 用 Debian slim（glibc）而不是 Alpine（musl）：
+# sharp 的原生库按 (架构, libc) 分别预编译，musl 那一套是问题高发区 ——
+# 一旦 npm 没按 libc 选对包，sharp 报出来的错还是个看不懂的 TypeError。
+# glibc 这条路是 sharp 支持得最好的，换过来能少一整类事故。
+# 代价：镜像大几十 MB。对这个应用来说，稳定比省空间重要。
+FROM node:20-slim AS backend
 WORKDIR /app
 
 COPY server/package.json server/package-lock.json ./

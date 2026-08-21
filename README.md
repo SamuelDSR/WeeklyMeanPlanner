@@ -766,6 +766,19 @@ Dockerfile 里已经加了两道防线：`npm ci --omit=dev --include=optional`�
 optional 被跳过），以及**构建时就 `require('sharp')` 一次** —— 平台不匹配的话
 在 build 阶段就失败，而不是部署完容器反复重启才发现。arm64 和 amd64 都验证过能通过。
 
+#### 根本解法：基础镜像用 glibc，不用 Alpine
+
+sharp 的原生库按 **(架构, libc)** 两个维度分别预编译。Alpine 用的 musl 是第二个维度，
+也是问题高发的那一边：包装上了、架构也对，照样可能加载不起来，
+而 sharp 报出来的还是那个看不懂的 TypeError。
+
+所以 `Dockerfile` 的基础镜像从 `node:20-alpine` 换成了 `node:20-slim`（Debian，glibc）。
+glibc 是 sharp 支持得最好的一条路，直接少掉一整类事故。
+代价是镜像大几十 MB —— 对这个应用来说，稳定比省空间重要。
+
+已验证：`--platform linux/amd64` 建出来的 slim 镜像里 sharp 能正常加载
+（`sharp ok, libvips 8.18.3 x64 linux`），并且真的跑通了一次缩放。
+
 #### 修
 
 **在目标机器上重新 build**（最省事）：
