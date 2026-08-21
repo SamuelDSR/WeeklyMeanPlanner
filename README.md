@@ -508,7 +508,62 @@ notification_log     family_id, date, meal_slot —— UNIQUE，用来去重
 app_settings         key/value —— 目前只放自动生成的 VAPID 密钥
 ```
 
-### 21. 配置你的 nginx
+### 21. 用 Portainer 部署
+
+`docker-compose.yml` 里有两处依赖"宿主机上有源码"：`build: context: .`
+和相对路径挂载 `./server/src/schema.sql`。Portainer 的 Stack 有两种模式，
+差别就在这里。
+
+**先说一件事：别把本机 build 的镜像搬过去。** Docker Desktop（Apple Silicon）
+出来的是 `linux/arm64`，x86_64 的服务器跑不了。要么在目标机上 build，
+要么用 buildx 出 amd64 推到 registry。
+
+#### 方式 A：Repository 类型 Stack（推荐）
+
+Portainer 自己把仓库 clone 到宿主机，然后在那个目录里跑 compose ——
+源码在，所以 `build` 和相对路径挂载都正常，直接用 `docker-compose.yml`。
+
+```
+Portainer → Stacks → Add stack → Repository
+  Repository URL     你的仓库地址
+  Compose path       docker-compose.yml
+  Environment variables 里填 POSTGRES_PASSWORD / JWT_SECRET / ADMIN_EMAIL
+```
+
+好处是以后更新代码只要点 "Pull and redeploy"。
+注意 `.env` 没有提交进仓库，所以环境变量要在 Portainer 界面上填
+（作用等同于 `.env`）。
+
+#### 方式 B：Web editor / Upload 类型 Stack
+
+这种模式宿主机上没有源码，`build` 用不了，得先有镜像。用
+`docker-compose.portainer.yml` 这个变体：
+
+```bash
+# 1. 在**目标机器**上 build 一次（或者从 registry 拉）
+git clone <仓库> /srv/meal-planner-src && cd /srv/meal-planner-src
+docker build -t meal-planner-api:1.0 .
+
+# 2. schema.sql 放到宿主机上（从零建库时 postgres 要用它）
+mkdir -p /srv/meal-planner && cp server/src/schema.sql /srv/meal-planner/
+
+# 3. Portainer 里贴 docker-compose.portainer.yml 的内容，环境变量填：
+#    POSTGRES_PASSWORD / JWT_SECRET / ADMIN_EMAIL
+#    API_IMAGE=meal-planner-api:1.0
+#    SCHEMA_SQL_PATH=/srv/meal-planner/schema.sql
+```
+
+如果你是**恢复 dump**（dump 里自带建表语句），第 2 步可以跳过，
+把那一行挂载删掉就行。
+
+想用 registry 而不是本地标签：
+
+```bash
+docker buildx build --platform linux/amd64 -t ghcr.io/<你>/meal-planner-api:1.0 --push .
+# 然后 API_IMAGE=ghcr.io/<你>/meal-planner-api:1.0
+```
+
+### 22. 配置你的 nginx
 
 参考项目里的 `nginx-example.conf`，核心是把 `meal.xxx.fr` 反向代理到
 `127.0.0.1:8080`。记得转发 `X-Forwarded-Proto` 这个头，后端要靠它判断
@@ -554,6 +609,7 @@ npm run dev              # 监听 5173，自动把 /api 和 /uploads 代理到 3
 meal-planner/
 ├── docker-compose.yml       服务编排：postgres + api
 ├── Dockerfile               多阶段构建：编译前端 + 打包后端
+├── docker-compose.portainer.yml  Portainer Web editor 用的变体（用现成镜像）
 ├── nginx-example.conf       给你宿主机 nginx 参考的反向代理配置
 ├── .env.example             docker compose 用的环境变量
 ├── server/                  后端

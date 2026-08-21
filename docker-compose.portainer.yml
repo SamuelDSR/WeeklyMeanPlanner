@@ -1,0 +1,57 @@
+# 给 Portainer「Web editor / Upload」类型的 Stack 用的变体。
+#
+# 和 docker-compose.yml 的区别只有两点，都是因为这种 Stack **宿主机上没有源码**：
+#   1. api 不再 build，改成用已经建好的镜像（image:）
+#   2. postgres 不再相对路径挂 schema.sql，改成绝对路径（或者干脆不挂，见下）
+#
+# 如果你用 Portainer 的「Repository」类型 Stack（让 Portainer 自己 clone 仓库），
+# 就**不需要这个文件**，直接用 docker-compose.yml —— 那种模式下源码在宿主机上，
+# build 和相对路径挂载都能正常工作。
+#
+# 环境变量：Portainer Stack 页面下方的 "Environment variables" 里填，
+# 效果等同于 .env。至少要填 POSTGRES_PASSWORD 和 JWT_SECRET。
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mealplanner
+      POSTGRES_USER: mealplanner
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?在 Portainer 的环境变量里设置 POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # 只在数据目录为空（第一次启动）时执行，用来建表。
+      # 需要先把 schema.sql 放到宿主机这个路径上：
+      #   mkdir -p /srv/meal-planner && cp server/src/schema.sql /srv/meal-planner/
+      # 如果你是**恢复 dump**（dump 里已经有建表语句），这一行可以整行删掉。
+      - ${SCHEMA_SQL_PATH:-/srv/meal-planner/schema.sql}:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mealplanner -d mealplanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    # 事先建好的镜像。可以是：
+    #   - 在这台机器上 build 出来的本地标签（docker build -t meal-planner-api:1.0 .）
+    #   - 或者你自己的 registry：ghcr.io/<你>/meal-planner-api:1.0
+    image: ${API_IMAGE:-meal-planner-api:1.0}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mealplanner:${POSTGRES_PASSWORD}@postgres:5432/mealplanner
+      JWT_SECRET: ${JWT_SECRET:?在 Portainer 的环境变量里设置 JWT_SECRET}
+      NODE_ENV: production
+      PORT: 3000
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+    volumes:
+      - uploads:/app/uploads
+    ports:
+      - "127.0.0.1:8080:3000"
+
+volumes:
+  pgdata:
+  uploads:
