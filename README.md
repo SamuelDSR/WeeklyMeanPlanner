@@ -676,7 +676,68 @@ postgres 容器（swarm 是 `<stack>_postgres.1.xxx`，compose 是 `<项目>-pos
 aarch64 + musl 写的，搬到 x86_64 上可能起不来，或者"能起来但索引排序悄悄不对"。
 SQL dump 是纯文本，跨架构安全。
 
-### 24. 配置你的 nginx
+### 24. 排错：sharp 报 `Cannot read properties of undefined (reading 'endsWith')`
+
+```
+/app/node_modules/sharp/dist/sharp.mjs:115
+    if (!err.code.endsWith("MODULE_NOT_FOUND")) {
+TypeError: Cannot read properties of undefined (reading 'endsWith')
+```
+
+**这不是 sharp 的 bug 在报什么有用的东西** —— 它是 sharp 加载原生库失败之后，
+错误处理自己又崩了：它假设每个失败都带 `err.code`，而真正的加载失败（架构不对、
+libc 不对）没有这个字段，于是报了个毫无关联的 TypeError，把真正的原因盖住了。
+
+**真正的原因几乎总是：镜像里的 sharp 原生库和运行平台不匹配。** 最常见的是
+在 Apple Silicon 上 build（arm64）然后跑在 x86_64 服务器上。
+
+#### 先看真正的错误
+
+api 容器如果在反复重启，`docker exec` 进不去，用覆盖 entrypoint 的方式跑：
+
+```bash
+docker run --rm --entrypoint sh <你的镜像> -c '
+  uname -m
+  node -p "process.platform + \" \" + process.arch"
+  ls /lib/ld-musl* >/dev/null 2>&1 && echo musl || echo glibc
+  echo "--- 装了哪些平台包 ---"
+  ls /app/node_modules/@img/
+  echo "--- 直接加载 binding，看真正的报错 ---"
+  node -e "require(\"@img/sharp-linuxmusl-x64\")" 2>&1 | head -3
+'
+```
+
+对照表 —— Alpine 基础镜像（musl）上应该看到：
+
+| 服务器 | `uname -m` | 必须有的包 |
+|---|---|---|
+| x86_64 | `x86_64` | `sharp-linuxmusl-x64` + `sharp-libvips-linuxmusl-x64` |
+| arm64 | `aarch64` | `sharp-linuxmusl-arm64` + `sharp-libvips-linuxmusl-arm64` |
+
+看到的是 `arm64` 包却跑在 `x86_64` 上 —— 就是镜像建错了平台。
+
+#### 修
+
+**在目标机器上重新 build**（最省事）：
+
+```bash
+docker build -t meal-planner-api:1.0 .
+```
+
+**或者用 buildx 出 amd64 再推到 registry**（在 Mac 上做）：
+
+```bash
+docker buildx build --platform linux/amd64 -t <registry>/meal-planner-api:1.0 --push .
+```
+
+这个 Dockerfile 已经验证过：`--platform linux/amd64` 建出来的镜像里是
+`sharp-linuxmusl-x64`，sharp 能正常加载。所以不用改 Dockerfile，
+只要 build 的平台对就行。
+
+> 顺带一句：`docker save` / `docker load` 搬镜像**不解决**这个问题 ——
+> 搬过去的还是 arm64 的那份。
+
+### 25. 配置你的 nginx
 
 参考项目里的 `nginx-example.conf`，核心是把 `meal.xxx.fr` 反向代理到
 `127.0.0.1:8080`。记得转发 `X-Forwarded-Proto` 这个头，后端要靠它判断
