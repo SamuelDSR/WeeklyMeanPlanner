@@ -649,6 +649,22 @@ cp scripts/restore.sh /tmp/migration/
 ./scripts/restore.sh /path/to/migration -y --force  # 目标库已有数据也覆盖
 ```
 
+图片有三种恢复方式（**bind mount 也能用**）：
+
+```bash
+# 默认：自动找 *_uploads 卷
+./scripts/restore.sh /path/to/migration
+
+# bind mount：直接解到本地目录
+UPLOADS_PATH=/srv/meal-planner/uploads ./scripts/restore.sh /path/to/migration
+
+# 只要数据库，图片自己解
+./scripts/restore.sh /path/to/migration --skip-uploads
+```
+
+什么都不指定、又没找到 `*_uploads` 卷时，**数据库照样恢复**，最后把图片的解压命令
+打给你 —— 不会因为图片这一步把整个恢复拦下来。
+
 `restore.sh` **只用 `docker` 命令**，compose 和 swarm 都能跑：它按名字找在跑的
 postgres 容器（swarm 是 `<stack>_postgres.1.xxx`，compose 是 `<项目>-postgres-1`），
 按 `*_uploads` 找卷，都能用 `PG_CONTAINER=` / `UPLOADS_VOLUME=` 覆盖。
