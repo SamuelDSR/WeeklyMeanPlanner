@@ -563,7 +563,52 @@ docker buildx build --platform linux/amd64 -t ghcr.io/<你>/meal-planner-api:1.0
 # 然后 API_IMAGE=ghcr.io/<你>/meal-planner-api:1.0
 ```
 
-### 22. 配置你的 nginx
+### 22. 备份
+
+```bash
+./scripts/backup.sh /mnt/backup          # 数据库 + 图片
+KEEP=14 ./scripts/backup.sh /mnt/backup  # 只留最近 14 份（默认 30）
+
+# crontab：每天凌晨 3 点
+0 3 * * * cd /path/to/meal-planner && ./scripts/backup.sh /mnt/backup >> /var/log/meal-backup.log 2>&1
+```
+
+**不要直接拷 pgdata 目录当备份。** Postgres 在跑的时候数据分散在很多文件加 WAL 里，
+`tar` / `rsync` 拿到的是撕裂快照，可能根本恢复不了 —— 而且你不会知道，
+直到真的要用的那天。所以脚本用 `pg_dump`：一致、能恢复、跨架构可移植，
+而且小得多（这个库：pgdata 63 MB vs dump 压缩后 8 KB）。
+
+脚本跑完会自检：gzip 完整性 + 数出至少 10 条 `CREATE TABLE`，不满足就非零退出
+（cron 里能被发现）。
+
+恢复：
+
+```bash
+gzip -dc /mnt/backup/db-20260821-030000.sql.gz   | docker compose exec -T postgres psql -U mealplanner -d mealplanner
+```
+
+#### 数据到底该放命名卷还是本地路径
+
+| | 命名卷（默认） | 本地路径 bind mount |
+|---|---|---|
+| 权限 | Docker 管，不容易手滑 | 要自己保证属主是容器里的 postgres |
+| 放宽权限 | — | Postgres 只接受 0700/0750，宽了**直接拒绝启动** |
+| 误暴露 | 难 | 路径可能落进 web 根目录、别的备份、甚至 git 仓库 |
+| SELinux | 无感 | 要 `:Z`，容易被人用"关掉 SELinux"糊过去 |
+
+建议：**pgdata 留命名卷**（备份靠 `pg_dump`，不需要能直接看到文件）；
+**uploads 用本地路径挺好** —— 就是些图片文件，没有一致性问题，rsync 很方便：
+
+```yaml
+  api:
+    volumes:
+      - /srv/meal-planner/uploads:/app/uploads
+```
+
+**备份文件本身是敏感的**：里面有 bcrypt 密码哈希、邮箱地址、以及推送用的
+VAPID 私钥。脚本已经把目录设成 700、文件设成 600；要传到别处请先加密。
+
+### 23. 配置你的 nginx
 
 参考项目里的 `nginx-example.conf`，核心是把 `meal.xxx.fr` 反向代理到
 `127.0.0.1:8080`。记得转发 `X-Forwarded-Proto` 这个头，后端要靠它判断
@@ -610,6 +655,7 @@ meal-planner/
 ├── docker-compose.yml       服务编排：postgres + api
 ├── Dockerfile               多阶段构建：编译前端 + 打包后端
 ├── docker-compose.portainer.yml  Portainer Web editor 用的变体（用现成镜像）
+├── scripts/backup.sh        备份：pg_dump + 图片打包，自带校验和保留策略
 ├── nginx-example.conf       给你宿主机 nginx 参考的反向代理配置
 ├── .env.example             docker compose 用的环境变量
 ├── server/                  后端
