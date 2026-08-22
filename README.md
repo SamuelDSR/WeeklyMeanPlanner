@@ -766,7 +766,47 @@ Dockerfile 里已经加了两道防线：`npm ci --omit=dev --include=optional`�
 optional 被跳过），以及**构建时就 `require('sharp')` 一次** —— 平台不匹配的话
 在 build 阶段就失败，而不是部署完容器反复重启才发现。arm64 和 amd64 都验证过能通过。
 
-#### 老服务器上必挂：clone3 / seccomp
+#### 先让构建自己把真正的原因打出来
+
+sharp 报的 TypeError 没有任何信息量。`server/scripts/sharp-doctor.cjs` 绕过
+sharp 那个坏掉的错误处理，逐个直接 `require` binding，把真正的 `code` / `msg` /
+`ldd` 打出来。Dockerfile 里已经接上：**sharp 加载失败时自动跑它**，
+所以构建日志里就有答案，不用再手工进容器。
+
+也可以单独跑：
+
+```bash
+docker run --rm --entrypoint node <你的镜像> /app/scripts/sharp-doctor.cjs
+```
+
+输出长这样（这是一台**正常**的机器，注意 musl 那条 FAIL 是正常的 ——
+glibc 容器里本来就加载不了 musl 版，只要有一个 OK 就行）：
+
+```
+=== 环境 ===
+node         v20.20.2 linux arm64
+libc         ldd (Debian GLIBC 2.31-13+deb11u13) 2.31
+kernel       7.0.12-linuxkit
+
+=== 逐个直接加载 binding（真正的报错在这里）===
+  OK    sharp-linux-arm64/sharp-linux-arm64-0.35.3.node
+  FAIL  sharp-linuxmusl-arm64/...node
+        code = ERR_DLOPEN_FAILED
+        msg  = libc.musl-aarch64.so.1: cannot open shared object file
+```
+
+**全部 FAIL 才是真出问题**（sharp 只要有一个能加载就正常）。这时看每条的
+`code` / `msg` / `ldd`：
+
+| 看到 | 说明 |
+|---|---|
+| `Error relocating` / `symbol not found` | libc 版本不匹配 |
+| `wrong ELF class` / `Exec format error` | 架构不对 |
+| `cannot open shared object file` + `ldd ... not found` | 缺依赖库 |
+| `GLIBC_2.xx not found` | 容器 glibc 太老，配不上预编译库 |
+| 报 `Operation not permitted` 之类 | 很可能是 seccomp（见下） |
+
+#### 老服务器上可能撞到：clone3 / seccomp
 
 **症状**：新机器上一切正常，某台老服务器上无论怎么重建都报那个 TypeError。
 

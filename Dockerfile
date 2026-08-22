@@ -32,11 +32,15 @@ COPY server/package.json server/package-lock.json ./
 # 而 sharp 报出来的错会是一个完全看不懂的 TypeError（见 README 排错那节）。
 RUN npm ci --omit=dev --include=optional
 
-# 构建时就把 sharp 加载一遍。原生库和平台不匹配的话，
-# 让它**在这里**失败 —— 而不是部署之后容器反复重启、报一个牛头不对马嘴的错。
-RUN node -e "const s=require('sharp'); console.log('sharp ok, libvips', s.versions.vips, process.arch, process.platform)" 
 
 COPY server/ ./
+
+# 构建时就把 sharp 加载一遍：平台/libc 不匹配的话在**这里**失败，
+# 而不是部署之后容器反复重启。
+# 失败时自动跑 sharp-doctor：它绕过 sharp 那个坏掉的错误处理，
+# 直接逐个加载 binding，把真正的报错（code + msg + ldd）打进构建日志。
+RUN node -e "const s=require('sharp'); console.log('sharp ok, libvips', s.versions.vips, process.arch, process.platform)" \
+ || (echo '=== sharp 加载失败，下面是真正的原因 ==='; node scripts/sharp-doctor.cjs; exit 1)
 # 把上一阶段构建好的前端静态文件拷进来，Express 会直接托管这个目录
 COPY --from=frontend-build /app/frontend/dist ./public
 
