@@ -20,7 +20,24 @@ console.log('=== 环境 ===');
 console.log('node        ', process.version, process.platform, process.arch);
 console.log('libc        ', sh('ldd --version 2>&1 | head -1') || sh('ls /lib/ld-musl* 2>/dev/null'));
 console.log('kernel      ', sh('uname -r'));
-console.log('cpu flags   ', (sh("grep -m1 '^flags' /proc/cpuinfo").match(/\b(avx2|avx512f|sse4_2)\b/g) || []).join(' ') || '(读不到)');
+console.log('cpu model   ', sh("grep -m1 'model name' /proc/cpuinfo").replace(/^.*:\s*/, '') || '(读不到)');
+
+// sharp >= 0.33 的 Linux x64 预编译库要求 x86-64-v2 微架构。
+// CPU 太老（很多 NAS 上的 Atom / 老 Celeron）就用不了 —— 这时 binding 能加载，
+// 但 sharp 会主动把它扔掉（见 sharp.cjs 里 _isUsingX64V2 那一段）。
+const V2_FLAGS = ['cx16', 'popcnt', 'sse3', 'ssse3', 'sse4_1', 'sse4_2'];
+if (process.arch === 'x64') {
+  const flags = sh("grep -m1 '^flags' /proc/cpuinfo");
+  if (flags && flags !== '(n/a)') {
+    const have = V2_FLAGS.filter((f) => new RegExp(`\\b${f}\\b`).test(flags));
+    const missing = V2_FLAGS.filter((f) => !have.includes(f));
+    console.log('x86-64-v2   ', missing.length === 0
+      ? '满足 (' + have.join(' ') + ')'
+      : '**不满足**，缺: ' + missing.join(' ') + '  <- sharp 的预编译库跑不了');
+  } else {
+    console.log('x86-64-v2   ', '(读不到 /proc/cpuinfo)');
+  }
+}
 
 const dir = path.join(__dirname, '..', 'node_modules', '@img');
 console.log('\n=== @img 里的包 ===');
@@ -54,6 +71,24 @@ for (const pkg of fs.readdirSync(dir).sort()) {
       console.log(`        code = ${e.code}`);
       console.log(`        msg  = ${String(e.message).split('\n')[0]}`);
       if (missing) console.log(`        ldd  = ${missing.replace(/\n/g, ' | ')}`);
+    }
+  }
+}
+
+// 直接问 binding 自己：CPU 够不够 v2
+console.log('\n=== binding 自报 CPU 支持情况 ===');
+for (const pkg of ['sharp-linux-x64', 'sharp-linuxmusl-x64']) {
+  const libdir = path.join(dir, pkg, 'lib');
+  if (!fs.existsSync(libdir)) continue;
+  for (const f of fs.readdirSync(libdir).filter((n) => n.endsWith('.node'))) {
+    try {
+      const b = require(path.join(libdir, f));
+      if (typeof b._isUsingX64V2 === 'function') {
+        const ok = b._isUsingX64V2();
+        console.log(`  ${pkg}: _isUsingX64V2() = ${ok}${ok ? '' : '   <- 就是这里！sharp 会因此拒绝使用它'}`);
+      }
+    } catch {
+      // 上面已经报过加载失败了
     }
   }
 }

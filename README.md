@@ -766,7 +766,44 @@ Dockerfile 里已经加了两道防线：`npm ci --omit=dev --include=optional`�
 optional 被跳过），以及**构建时就 `require('sharp')` 一次** —— 平台不匹配的话
 在 build 阶段就失败，而不是部署完容器反复重启才发现。arm64 和 amd64 都验证过能通过。
 
-#### 先让构建自己把真正的原因打出来
+#### 最可能的原因：CPU 太老（x86-64-v2）
+
+看 sharp 自己的代码（`sharp.cjs`）：
+
+```js
+if (sharp && ["linux-x64","linuxmusl-x64"].includes(runtimePlatform) && !sharp._isUsingX64V2()) {
+  const err = new Error("Prebuilt binaries for Linux x64 require v2 microarchitecture");
+  errors.push(err);
+  sharp = null;          // 把已经加载成功的 binding 主动扔掉
+}
+```
+
+**sharp >= 0.33 的 Linux x64 预编译库要求 x86-64-v2 微架构**
+（需要 SSE4.2 / POPCNT / SSSE3 / SSE4.1 / CX16）。很多 NAS、老服务器上的
+Atom / 老 Celeron 达不到。这时候 binding **能加载**，是 sharp 自己拒绝用它 ——
+所以 `sharp-doctor` 会显示 `OK sharp-linux-x64` 但 `require("sharp")` 还是失败。
+
+在**宿主机**上一条命令确认：
+
+```bash
+grep -m1 -o -E 'sse4_2' /proc/cpuinfo || echo '缺 sse4_2 -> 不满足 x86-64-v2'
+lscpu | grep -i 'model name'
+```
+
+**解法：sharp 钉在 0.32.x**（本仓库已采用）。0.33 才引入这个 CPU 检查，
+0.32.6 没有，老 CPU 上能正常跑：
+
+```json
+"sharp": "^0.32.6"
+```
+
+代价是 libvips 版本旧一些（8.14.5 vs 8.18.3），本项目用到的 API
+（`rotate` / `resize` / `jpeg` / `clone` / `failOn`）0.32 全都有，行为一致 ——
+已验证：amd64 上跑通完整上传管线，主图 1233x1600、缩略图 308x400，和之前一样。
+
+CPU 支持 v2 的机器（近十年的机器基本都支持）想用新版，把它改回 `^0.35.3` 即可。
+
+#### 让构建自己把真正的原因打出来
 
 sharp 报的 TypeError 没有任何信息量。`server/scripts/sharp-doctor.cjs` 绕过
 sharp 那个坏掉的错误处理，逐个直接 `require` binding，把真正的 `code` / `msg` /
