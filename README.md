@@ -783,15 +783,37 @@ if (sharp && ["linux-x64","linuxmusl-x64"].includes(runtimePlatform) && !sharp._
 Atom / 老 Celeron 达不到。这时候 binding **能加载**，是 sharp 自己拒绝用它 ——
 所以 `sharp-doctor` 会显示 `OK sharp-linux-x64` 但 `require("sharp")` 还是失败。
 
-在**宿主机**上一条命令确认：
+**虚拟机里最常见的其实不是"CPU 老"，而是虚拟机把 CPU 特性屏蔽了。**
+Proxmox 新建 VM 的默认 CPU type 是 `kvm64` —— 一个非常保守的型号，
+**不暴露 SSE4.2**。宿主机是再新的 Xeon 也一样，guest 里就是看不到，
+于是 sharp 的 v2 检查必然不过。
+
+在**虚拟机内部**一条命令确认：
 
 ```bash
 grep -m1 -o -E 'sse4_2' /proc/cpuinfo || echo '缺 sse4_2 -> 不满足 x86-64-v2'
 lscpu | grep -i 'model name'
 ```
 
-**解法：sharp 钉在 0.32.x**（本仓库已采用）。0.33 才引入这个 CPU 检查，
-0.32.6 没有，老 CPU 上能正常跑：
+`model name` 显示 `Common KVM processor` / `QEMU Virtual CPU` 这类，
+就是被虚拟机屏蔽了。
+
+**解法 A（Proxmox / KVM 虚拟机，推荐）**：把 VM 的 CPU type 从 `kvm64` 改掉。
+
+```
+Proxmox 界面： VM -> Hardware -> Processor -> Type
+  host              直接透传宿主机 CPU，性能最好
+  x86-64-v2-AES     想保留跨机器迁移能力时用这个
+```
+
+改完要**完整关机再开机**（reboot 不生效，CPU 型号只在开机时确定）。
+顺带一提：`kvm64` 还屏蔽了 AES-NI、AVX 等，换掉之后整台机器都会快一些。
+
+注意：`host` 会让 VM 绑死在当前宿主机的 CPU 上，集群里做在线迁移会有问题 ——
+有集群就选 `x86-64-v2-AES` 或某个具体型号。
+
+**解法 B：sharp 钉在 0.32.x**（本仓库当前采用，改不了虚拟机配置时用）。
+0.33 才引入这个 CPU 检查，0.32.6 没有：
 
 ```json
 "sharp": "^0.32.6"
@@ -801,7 +823,9 @@ lscpu | grep -i 'model name'
 （`rotate` / `resize` / `jpeg` / `clone` / `failOn`）0.32 全都有，行为一致 ——
 已验证：amd64 上跑通完整上传管线，主图 1233x1600、缩略图 308x400，和之前一样。
 
-CPU 支持 v2 的机器（近十年的机器基本都支持）想用新版，把它改回 `^0.35.3` 即可。
+按解法 A 修好虚拟机之后，就可以把 sharp 改回 `^0.35.3` 用新版 libvips 了
+（`server/package.json` 里改一行，然后在目标机器上重建 —— 构建时的自检会立刻
+告诉你行不行）。
 
 #### 让构建自己把真正的原因打出来
 

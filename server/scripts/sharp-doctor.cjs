@@ -34,6 +34,17 @@ if (process.arch === 'x64') {
     console.log('x86-64-v2   ', missing.length === 0
       ? '满足 (' + have.join(' ') + ')'
       : '**不满足**，缺: ' + missing.join(' ') + '  <- sharp 的预编译库跑不了');
+    // 虚拟机里最常见的原因不是 CPU 老，而是**虚拟机把 CPU 特性屏蔽了**：
+    // Proxmox 默认的 kvm64 就不暴露 SSE4.2，宿主机再新也没用。
+    if (missing.length > 0) {
+      const model = sh("grep -m1 'model name' /proc/cpuinfo");
+      const virt = /QEMU|KVM|Virtual|Common/i.test(model);
+      console.log('              ',
+        virt
+          ? '看着像虚拟机的通用 CPU 型号 -> 大概率是虚拟机的 CPU type 设成了 kvm64 之类，'
+            + '把真实 CPU 特性屏蔽掉了。改成 host / x86-64-v2-AES 再关机重启即可。'
+          : '不像虚拟化的通用型号 -> 可能真的是老 CPU（Atom / 老 Celeron）。');
+    }
   } else {
     console.log('x86-64-v2   ', '(读不到 /proc/cpuinfo)');
   }
