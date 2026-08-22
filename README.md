@@ -766,7 +766,42 @@ Dockerfile 里已经加了两道防线：`npm ci --omit=dev --include=optional`�
 optional 被跳过），以及**构建时就 `require('sharp')` 一次** —— 平台不匹配的话
 在 build 阶段就失败，而不是部署完容器反复重启才发现。arm64 和 amd64 都验证过能通过。
 
-#### 根本解法：基础镜像用 glibc，不用 Alpine
+#### 老服务器上必挂：clone3 / seccomp
+
+**症状**：新机器上一切正常，某台老服务器上无论怎么重建都报那个 TypeError。
+
+**原因**：glibc >= 2.34 会用 `clone3` 系统调用，而 **Docker < 20.10.10 的默认
+seccomp 配置把它挡掉了**。libvips 重度用线程，原生库初始化直接失败；
+这个失败抛出的错误没有 `.code`，正好踩中 sharp 那个坏掉的错误处理，
+于是报出来是一句和真实原因毫无关系的 TypeError。
+
+**怎么确认是这个**（一条命令）：
+
+```bash
+# 宿主机的 glibc / Docker 版本
+ldd --version | head -1     # 2.28 -> Debian 10，Docker 大概是 19.03
+docker --version
+
+# 关掉 seccomp 再加载一次 sharp；如果这样就成功了，那就是它
+docker run --rm --security-opt seccomp=unconfined --entrypoint node <你的镜像> \
+  -e "require('sharp'); console.log('seccomp 放开后 OK')"
+```
+
+**解法**（本仓库已采用第 2 个）：
+
+1. 服务器上把 Docker 升到 >= 20.10.10（根治）
+2. **基础镜像用 glibc < 2.34 的**：`node:20-bullseye-slim`（Debian 11，glibc 2.31）
+   —— 不用 clone3，老 Docker 也能跑。sharp 预编译库要求 glibc >= 2.28，2.31 满足
+3. 临时应急：跑的时候加 `--security-opt seccomp=unconfined`（削弱隔离，不推荐长期用）
+
+| 基础镜像 | glibc | 老 Docker(<20.10.10) |
+|---|---|---|
+| `node:20-slim`（bookworm） | 2.36 | ✗ 挂 |
+| `node:20-bullseye-slim` | 2.31 | ✓ 可以 |
+
+Docker 升级之后可以换回 `node:20-slim`。
+
+#### 为什么不用 Alpine
 
 sharp 的原生库按 **(架构, libc)** 两个维度分别预编译。Alpine 用的 musl 是第二个维度，
 也是问题高发的那一边：包装上了、架构也对，照样可能加载不起来，

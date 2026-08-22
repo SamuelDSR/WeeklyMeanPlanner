@@ -1,5 +1,5 @@
 # ---------- 阶段一：构建前端静态文件 ----------
-FROM node:20-slim AS frontend-build
+FROM node:20-bullseye-slim AS frontend-build
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
@@ -7,12 +7,23 @@ COPY frontend/ ./
 RUN npm run build
 
 # ---------- 阶段二：后端运行环境 ----------
-# 用 Debian slim（glibc）而不是 Alpine（musl）：
+# 用 **bullseye**-slim（Debian 11，glibc 2.31），不是默认的 slim（bookworm，glibc 2.36）：
+#
+# glibc >= 2.34 会用 clone3 这个系统调用，而 Docker < 20.10.10 的默认 seccomp
+# 配置把它挡掉了。libvips 重度用线程，于是原生库初始化就失败 ——
+# 而这个失败抛出的错误没有 .code，正好踩中 sharp 那个坏掉的错误处理，
+# 报出来是一句莫名其妙的 TypeError。
+# 症状：老服务器（Debian 10 / glibc 2.28 / Docker 19.03）上必挂，新机器上一切正常。
+#
+# glibc 2.31 不用 clone3，所以老 Docker 也能跑。sharp 的预编译库要求 glibc >= 2.28，
+# 2.31 满足。服务器上的 Docker 升到 >= 20.10.10 之后，可以换回 node:20-slim。
+#
+# 用 Debian（glibc）而不是 Alpine（musl）：
 # sharp 的原生库按 (架构, libc) 分别预编译，musl 那一套是问题高发区 ——
 # 一旦 npm 没按 libc 选对包，sharp 报出来的错还是个看不懂的 TypeError。
 # glibc 这条路是 sharp 支持得最好的，换过来能少一整类事故。
 # 代价：镜像大几十 MB。对这个应用来说，稳定比省空间重要。
-FROM node:20-slim AS backend
+FROM node:20-bullseye-slim AS backend
 WORKDIR /app
 
 COPY server/package.json server/package-lock.json ./
