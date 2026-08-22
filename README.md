@@ -1097,3 +1097,43 @@ NAS 或者一个便宜的对象存储），这样即使服务器本身出问题�
 - 每周自动生成菜谱的定时任务
 - 菜谱评分、按季节推荐、营养均衡度分析（跟 Firebase 版提到的一样，思路不变，
   只是数据库操作要改成 SQL）
+
+### 让局域网里的手机/电脑直接访问
+
+`.env` 里两个变量要一起改，只改一个会出现"能打开页面但登不上"：
+
+```bash
+BIND_ADDR=0.0.0.0       # 8080 绑到所有网卡，不再只给本机
+COOKIE_SECURE=false     # 关键：见下
+```
+
+然后 `docker compose up -d api`，手机浏览器开 `http://<这台机器的局域网IP>:8080`。
+
+**为什么必须同时把 COOKIE_SECURE 关掉。** `COOKIE_SECURE=true` 时登录 cookie 带
+`Secure` 标记，浏览器只肯在 https 下保存它 —— 唯一的例外是 `localhost`。
+从 `http://192.168.x.x` 访问时，登录请求会返回 200，但 cookie 被浏览器直接丢掉，
+于是下一个请求又是未登录状态，表现就是**"登录成功后一闪又回到登录页"**：
+
+```
+http://localhost:8080     Secure cookie -> 浏览器破例保存   -> 登录正常
+http://192.168.0.55:8080  Secure cookie -> 浏览器直接丢掉   -> 一直跳回登录页
+https://meal.xxx.fr       Secure cookie -> 正常保存         -> 登录正常
+```
+
+**明文 http 走局域网还有两个功能用不了**（浏览器要求 secure context，
+`localhost` 例外，局域网 IP 不例外）：
+
+| 功能 | http://局域网IP | https 域名 |
+|---|---|---|
+| 正常浏览、记录菜谱、排菜单 | 可以 | 可以 |
+| 登录（要 `COOKIE_SECURE=false`） | 可以 | 可以 |
+| 装成 App / 离线缓存（PWA） | **不行** | 可以 |
+| 做饭提醒推送（Web Push） | **不行** | 可以 |
+
+所以要手机推送提醒，就得有 https。家里的几种做法：
+
+- **前面挂 nginx + 证书**（本仓库原本的设计）—— `BIND_ADDR` 留 `127.0.0.1`，
+  `COOKIE_SECURE=true`，反代到 `127.0.0.1:8080`。
+- **Tailscale / WireGuard** —— 手机进同一个虚拟网，Tailscale 还自带 https 域名，
+  改都不用改。
+- **只在局域网里用、不要推送** —— 上面两个变量一改就行，最省事。
