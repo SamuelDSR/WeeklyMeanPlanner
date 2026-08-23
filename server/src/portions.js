@@ -16,7 +16,7 @@ import { roundQty } from './units.js';
 const DEFAULT_SERVINGS = 4;
 const DEFAULT_MEMBER_COUNT = 2;
 
-// days: [{ date, weekday, 早餐: [recipeId,...], ... }]
+// days: [{ date, weekday, 午餐: [recipeId,...], 晚餐: [...] }]
 // 统计每道菜在这一周出现了几次
 export function countOccurrences(days) {
   const counts = new Map();

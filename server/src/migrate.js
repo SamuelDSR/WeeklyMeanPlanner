@@ -332,6 +332,40 @@ const MIGRATIONS = [
       ) WHERE f.default_staple_id IS NULL;
     `,
   },
+  {
+    name: '012_drop_breakfast_slot',
+    sql: `
+      -- 去掉「早餐」这个餐次：早饭各人各吃，没必要排进每周计划里。
+      -- 现在只排 午餐 / 晚餐。
+      --
+      -- 历史里如果真有早餐记录，删掉就等于丢数据，所以这里只删「还没确认」的周；
+      -- 已经归档的周原样留着，历史页照旧显示（餐次名是跟着数据走的，不依赖 MEAL_SLOTS）。
+      DELETE FROM menu_staples
+       WHERE meal_slot = '早餐'
+         AND weekly_menu_id IN (SELECT id FROM weekly_menus WHERE confirmed_at IS NULL);
+      DELETE FROM menu_slots
+       WHERE meal_slot = '早餐'
+         AND weekly_menu_id IN (SELECT id FROM weekly_menus WHERE confirmed_at IS NULL);
+
+      -- 菜谱上的「适合早餐」标记去掉。
+      -- 只标了早餐的菜会变成空数组 —— 那样它既不会被自动排菜选中、也没法手动加进任何一格，
+      -- 等于悄悄消失，所以兜底给成 午餐+晚餐。
+      UPDATE recipes SET meals = array_remove(meals, '早餐') WHERE '早餐' = ANY(meals);
+      UPDATE recipes SET meals = '{午餐,晚餐}' WHERE cardinality(meals) = 0;
+
+      -- 家庭设置里的早餐时间和「早餐配主食」一并去掉
+      UPDATE families SET meal_times = meal_times - '早餐' WHERE meal_times ? '早餐';
+      UPDATE families SET staple_meals = array_remove(staple_meals, '早餐')
+       WHERE '早餐' = ANY(staple_meals);
+
+      -- 新建家庭的默认餐次时间也不要早餐了
+      ALTER TABLE families ALTER COLUMN meal_times
+        SET DEFAULT '{"午餐":"12:00","晚餐":"19:00"}'::jsonb;
+
+      -- 早餐的提醒记录没用了（这张表只用来防重复发送）
+      DELETE FROM notification_log WHERE meal_slot = '早餐';
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

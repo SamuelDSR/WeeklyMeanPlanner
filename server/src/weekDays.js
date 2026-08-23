@@ -1,4 +1,4 @@
-// 一周日期骨架：把 menu_slots 的行填回「7 天 x 4 餐」的结构里。
+// 一周日期骨架：把 menu_slots 的行填回「7 天 x 每天午/晚两餐」的结构里。
 // menu.js 和 shopping.js 都要用同一套，所以放在这里。
 import { MEAL_SLOTS, WEEKDAY_LABELS } from './recommend.js';
 
@@ -15,7 +15,7 @@ export function toDateStr(d) {
   return typeof d === 'string' ? d : d.toISOString().slice(0, 10);
 }
 
-// 一周 7 天 x 4 餐的完整骨架，再把 menu_slots 里的菜填进去。
+// 一周 7 天 x 每天两餐的完整骨架，再把 menu_slots 里的菜填进去。
 // 从 week_start 推算而不是从行数据反推：空格子现在就是没有行，
 // 直接按行拼的话，一整天都没安排就会整天消失。
 export function buildWeekDays(weekStart, slotRows) {

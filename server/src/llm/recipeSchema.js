@@ -9,7 +9,7 @@
 import { UNIT_OPTIONS } from '../units.js';
 
 export const RECIPE_CATEGORIES = ['蔬菜', '水果', '肉类', '鱼类', '蛋奶豆制品', '主食', '汤羹'];
-export const MEALS = ['早餐', '午餐', '晚餐'];
+export const MEALS = ['午餐', '晚餐'];
 export const ING_CATEGORIES = ['蔬菜类', '水果类', '肉禽类', '水产类', '蛋奶类', '干货粮油', '调料', '其他'];
 
 const SUGGESTED_UNITS = UNIT_OPTIONS.flatMap((g) => g.units);

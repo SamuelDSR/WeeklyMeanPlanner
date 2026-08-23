@@ -16,7 +16,7 @@ import { MEAL_SLOTS } from './recommend.js';
 import { sendToSubscriptions } from './push.js';
 
 const BUFFER_MINUTES = 15; // 备料、预热的余量
-const DEFAULT_MEAL_TIMES = { 早餐: '08:00', 午餐: '12:00', 晚餐: '19:00' };
+const DEFAULT_MEAL_TIMES = { 午餐: '12:00', 晚餐: '19:00' };
 
 // 某个时区里现在是几点，返回从零点开始的分钟数
 export function minutesOfDayIn(timeZone, now = new Date()) {

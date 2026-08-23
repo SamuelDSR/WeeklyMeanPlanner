@@ -64,7 +64,7 @@ function toItem(entry) {
   return { ...shared, qty: roundQty(entry.qty), unit: entry.unit };
 }
 
-// days: [{ date, weekday, 早餐: [recipeId,...], ... }]
+// days: [{ date, weekday, 午餐: [recipeId,...], 晚餐: [...] }]
 // recipesById: Map<id, { name, servings, ingredients:[{name,amount,unit,category,isOptional}] }>
 // stapleTotals: computeStaplePlan() 的结果（可以不传）
 export function buildShoppingList(days, recipesById, memberCount, stapleTotals = []) {

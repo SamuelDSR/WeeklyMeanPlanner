@@ -18,7 +18,7 @@ import { domainLabel } from '../i18n/domain';
 // 这三组都是**数据库里的值**（recipes.category / menu_slots.meal_slot / ingredients.category），
 // 只在显示时翻译，见 i18n/domain.js
 const CATEGORY_OPTIONS = ['蔬菜', '水果', '肉类', '鱼类', '蛋奶豆制品', '主食', '汤羹'];
-const MEAL_OPTIONS = ['早餐', '午餐', '晚餐'];
+const MEAL_OPTIONS = ['午餐', '晚餐'];
 const ING_CATEGORY_OPTIONS = ['蔬菜类', '水果类', '肉禽类', '水产类', '蛋奶类', '干货粮油', '调料', '其他'];
 
 let idCounter = 0;

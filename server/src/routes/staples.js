@@ -129,7 +129,7 @@ router.patch('/settings', async (req, res) => {
   if (req.body?.stapleMeals !== undefined) {
     const meals = req.body.stapleMeals;
     if (!Array.isArray(meals) || meals.some((m) => !MEAL_SLOTS.includes(m))) {
-      return res.status(400).json({ error: '餐次只能是早餐/午餐/晚餐' });
+      return res.status(400).json({ error: '餐次只能是午餐/晚餐' });
     }
     values.push(Array.from(new Set(meals)));
     updates.push(`staple_meals=$${values.length}`);

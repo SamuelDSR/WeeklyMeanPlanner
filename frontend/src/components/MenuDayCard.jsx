@@ -47,7 +47,7 @@ function StapleRow({ staple, staples, onSelect, t, locale }) {
   );
 }
 
-// 一天的四餐。每一顿可以配好几道菜：已选的用小标签列出来，下面的下拉框往里加菜。
+// 一天的午餐和晚餐。每一顿可以配好几道菜：已选的用小标签列出来，下面的下拉框往里加菜。
 export default function MenuDayCard({
   day,
   recipes,
@@ -69,7 +69,10 @@ export default function MenuDayCard({
         <span className="text-xs text-ink/40 font-mono">{day.date}</span>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      {/* 只剩午/晚两顿了，手机上就各占一整行：
+          一格里要塞餐次名、出去吃按钮、菜品标签、加菜下拉、主食下拉，
+          挤在半屏宽里太局促。竖着排总高度和以前三餐两列一样，但每格宽了一倍。 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {MEAL_SLOTS.map((meal) => {
           const chosen = day[meal] || [];
           const mealLabel = domainLabel(locale, 'meal', meal);

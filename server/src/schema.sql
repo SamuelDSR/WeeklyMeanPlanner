@@ -9,7 +9,7 @@ CREATE TABLE families (
   member_count INTEGER NOT NULL DEFAULT 2,          -- 家里几口人
   owner_id     INTEGER,                             -- 创建者（外键在 users 建好之后再加）
   timezone     TEXT NOT NULL DEFAULT 'Europe/Paris', -- 决定「本周」「今天」是哪一天
-  meal_times   JSONB NOT NULL DEFAULT '{"早餐":"08:00","午餐":"12:00","晚餐":"19:00"}'::jsonb,
+  meal_times   JSONB NOT NULL DEFAULT '{"午餐":"12:00","晚餐":"19:00"}'::jsonb,
   notify_enabled      BOOLEAN NOT NULL DEFAULT false,
   notify_lead_minutes INTEGER NOT NULL DEFAULT 60,
   -- 默认主食（外键在 staples 建好之后再加）和「哪几顿配主食」
@@ -117,7 +117,7 @@ CREATE TABLE menu_slots (
   weekly_menu_id  INTEGER NOT NULL REFERENCES weekly_menus(id) ON DELETE CASCADE,
   date            DATE NOT NULL,
   weekday         TEXT NOT NULL,       -- 周一 ~ 周日
-  meal_slot       TEXT NOT NULL,       -- 早餐/午餐/晚餐
+  meal_slot       TEXT NOT NULL,       -- 午餐/晚餐（早餐不排，见迁移 012）
   -- SET NULL 而不是 CASCADE：菜谱被删掉，过去几周的记录要留着
   recipe_id       INTEGER REFERENCES recipes(id) ON DELETE SET NULL,
   recipe_name     TEXT,                                -- 菜名快照，菜谱删了也认得

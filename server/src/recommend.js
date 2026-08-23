@@ -4,7 +4,9 @@
 // 3. 越久没做过的菜排名越靠前，然后在候选池前 40%（至少3个）里随机挑，
 //    兼顾轮换多样性和结果不完全固定
 
-export const MEAL_SLOTS = ['早餐', '午餐', '晚餐'];
+// 每周只排午饭和晚饭：早饭各人各吃，排进计划里没意义（见迁移 012）。
+// 加/减餐次只改这一行，前端有一份对应的 lib/constants.js。
+export const MEAL_SLOTS = ['午餐', '晚餐'];
 export const WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 export const WEEKDAY_TIME_LIMIT = 45;
 
@@ -48,7 +50,7 @@ export function formatDateISO(d) {
 }
 
 // recipes: [{id, name, meals, timeMinutes, lastCookedDate}]
-// 返回 { weekStart, days: [{date, weekday, 早餐, 午餐, 晚餐, 汤羹}] }（值是 recipeId 数组，可以为空）
+// 返回 { weekStart, days: [{date, weekday, 午餐, 晚餐}] }（值是 recipeId 数组，可以为空）
 // options.skipSlots: Set<'YYYY-MM-DD|餐次'> —— 已经排好的格子，一律不动
 // options.alreadyUsed: 这一周已经用过的菜 id，避免又推荐同一道
 //
