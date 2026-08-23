@@ -13,8 +13,30 @@ export default function SortableList({ items, onReorder, renderItem, itemClassNa
   const { t } = useI18n();
   const [dragIndex, setDragIndex] = useState(null);
   const rowRefs = useRef([]);
-  // 拖动过程中的实时顺序：交换发生在 pointermove 里，松手才算最终结果
-  const orderRef = useRef(null);
+  // 一次拖动的全部状态。按下时快照一份，松手清空。
+  //
+  // 为什么要快照：早先的做法是「手指越过相邻一行的中线就跟它换位置」，
+  // 但换完位置之后整个列表的布局就变了 —— 被拖的那行跑到了新位置，
+  // 参照物也跟着动，于是往下拖会少走一格（往上拖却是对的，很难察觉）。
+  // 现在改成：按下时记住各行中线和原始顺序，之后每次都拿指针位置直接算出
+  // 「应该落在第几位」，再从原始顺序重排一次。不累积误差，上下都准。
+  //
+  // 还要记一个 grabOffset：把手是贴着卡片顶部的（self-start），而卡片挺高，
+  // 所以按下的那一刻指针离这一行的中线差着几十像素。不修正的话，
+  // 得往下拖出一行多的距离才会发生第一次换位，手感很迟钝、还会少走一格。
+  // 修正之后是 1:1 的：拖过一行的高度，就正好挪一位。
+  const drag = useRef(null);
+
+  function reorderTo(target) {
+    const st = drag.current;
+    if (!st || target === st.currentIndex) return;
+    const next = [...st.baseline];
+    const [moved] = next.splice(st.fromIndex, 1);
+    next.splice(target, 0, moved);
+    st.currentIndex = target;
+    setDragIndex(target);
+    onReorder(next);
+  }
 
   function move(from, to) {
     if (to < 0 || to >= items.length || from === to) return;
@@ -28,39 +50,47 @@ export default function SortableList({ items, onReorder, renderItem, itemClassNa
     // 只认主键/单指，右键和多指手势不该触发拖动
     if (event.button != null && event.button !== 0) return;
     event.currentTarget.setPointerCapture?.(event.pointerId);
-    orderRef.current = index;
+    // 各行中线（视口坐标）。拖动过程里不再重新测量，避免参照物跟着动。
+    const centers = rowRefs.current
+      .filter(Boolean)
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return r.top + r.height / 2;
+      });
+    drag.current = {
+      fromIndex: index,
+      currentIndex: index,
+      centers,
+      // 指针相对「这一行中线」的偏移，后面用它把指针换算成行的位置
+      grabOffset: event.clientY - (centers[index] ?? event.clientY),
+      baseline: items,
+    };
     setDragIndex(index);
   }
 
   function handlePointerMove(event) {
-    if (orderRef.current == null) return;
-    const current = orderRef.current;
-    const y = event.clientY;
+    const st = drag.current;
+    if (!st) return;
+    const { centers, fromIndex, grabOffset } = st;
+    // 减掉抓取偏移 —— 比的是「这一行现在的中线在哪」，不是指尖在哪
+    const y = event.clientY - grabOffset;
 
-    // 越过上一项的中线就往上挪，越过下一项的中线就往下挪
-    const prev = rowRefs.current[current - 1];
-    const next = rowRefs.current[current + 1];
-    if (prev) {
-      const box = prev.getBoundingClientRect();
-      if (y < box.top + box.height / 2) {
-        move(current, current - 1);
-        orderRef.current = current - 1;
-        setDragIndex(current - 1);
-        return;
+    // 指针现在越过了哪些行的中线 -> 该落在第几位
+    let target = fromIndex;
+    for (let i = 0; i < centers.length; i += 1) {
+      if (i < fromIndex && y < centers[i]) {
+        target = i; // 往上：第一个中线在指针下方的行
+        break;
+      }
+      if (i > fromIndex && y > centers[i]) {
+        target = i; // 往下：最后一个中线在指针上方的行
       }
     }
-    if (next) {
-      const box = next.getBoundingClientRect();
-      if (y > box.top + box.height / 2) {
-        move(current, current + 1);
-        orderRef.current = current + 1;
-        setDragIndex(current + 1);
-      }
-    }
+    reorderTo(target);
   }
 
   function handlePointerUp() {
-    orderRef.current = null;
+    drag.current = null;
     setDragIndex(null);
   }
 
