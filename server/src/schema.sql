@@ -12,6 +12,9 @@ CREATE TABLE families (
   meal_times   JSONB NOT NULL DEFAULT '{"早餐":"08:00","午餐":"12:00","晚餐":"19:00"}'::jsonb,
   notify_enabled      BOOLEAN NOT NULL DEFAULT false,
   notify_lead_minutes INTEGER NOT NULL DEFAULT 60,
+  -- 默认主食（外键在 staples 建好之后再加）和「哪几顿配主食」
+  default_staple_id   INTEGER,
+  staple_meals        TEXT[] NOT NULL DEFAULT '{午餐,晚餐}',
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT families_member_count_check CHECK (member_count >= 1),
   CONSTRAINT families_notify_lead_check CHECK (notify_lead_minutes BETWEEN 0 AND 1440)
@@ -43,7 +46,8 @@ INSERT INTO schema_migrations (name) VALUES
   ('001_user_approval'), ('002_recipe_thumb'),
   ('003_servings_multi_dish_step_photos'), ('004_family_owner'), ('005_store_bought'),
   ('006_eat_out_history_ratings'), ('007_meal_likes_history_survives'),
-  ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications');
+  ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications'),
+  ('011_optional_ingredients_staples');
 
 -- families.owner_id -> users.id：两张表互相引用，所以等 users 建完再补这个外键
 ALTER TABLE families
@@ -79,6 +83,8 @@ CREATE TABLE ingredients (
   amount     NUMERIC NOT NULL DEFAULT 0,
   unit       TEXT NOT NULL DEFAULT '',
   category   TEXT NOT NULL DEFAULT '其他',
+  -- 可选食材：有更好，没有也能做（香菜、辣椒这种）。购物清单里单独标出来。
+  is_optional BOOLEAN NOT NULL DEFAULT false,
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX idx_ingredients_recipe ON ingredients(recipe_id);
@@ -133,6 +139,49 @@ CREATE UNIQUE INDEX menu_slots_eat_out_key
   ON menu_slots (weekly_menu_id, date, meal_slot) WHERE is_eat_out;
 CREATE INDEX idx_menu_slots_menu ON menu_slots(weekly_menu_id);
 
+-- 主食：米饭 / 面条 / 意面这些，和菜一起吃。
+--
+-- 为什么不塞进 recipes：算量的方式根本不同。
+--   菜   一份够 4 人 -> 整份做 -> ceil(顿数 x 人数 / 4)
+--   主食 每人 75 g   -> 线性  -> 75 x 人数 x 顿数
+CREATE TABLE staples (
+  id                SERIAL PRIMARY KEY,
+  family_id         INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  name              TEXT NOT NULL,
+  amount_per_person NUMERIC NOT NULL DEFAULT 75,      -- 一个人一顿吃多少（生重）
+  unit              TEXT NOT NULL DEFAULT 'g',
+  category          TEXT NOT NULL DEFAULT '干货粮油',  -- 购物清单里归到哪一类
+  sort_order        INTEGER NOT NULL DEFAULT 0,
+  created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT staples_amount_check CHECK (amount_per_person > 0)
+);
+CREATE INDEX idx_staples_family ON staples(family_id);
+
+ALTER TABLE families
+  ADD CONSTRAINT families_default_staple_fkey
+  FOREIGN KEY (default_staple_id) REFERENCES staples(id) ON DELETE SET NULL;
+
+-- 某一顿单独指定的主食。**没有行 = 用家庭默认**，这张表只存「例外」：
+--   周三改吃意面 -> 一行 staple_id=意面 ；周四不要主食 -> 一行 is_none=true
+CREATE TABLE menu_staples (
+  id                SERIAL PRIMARY KEY,
+  weekly_menu_id    INTEGER NOT NULL REFERENCES weekly_menus(id) ON DELETE CASCADE,
+  date              DATE NOT NULL,
+  meal_slot         TEXT NOT NULL,
+  -- 主食被删掉时靠这几个快照兜底（和 menu_slots.recipe_name 一个思路）
+  staple_id         INTEGER REFERENCES staples(id) ON DELETE SET NULL,
+  staple_name       TEXT,
+  amount_per_person NUMERIC,
+  unit              TEXT,
+  category          TEXT,
+  is_none           BOOLEAN NOT NULL DEFAULT false,
+  UNIQUE (weekly_menu_id, date, meal_slot),
+  CONSTRAINT menu_staples_entry_check CHECK (
+    (is_none AND staple_name IS NULL) OR (NOT is_none AND staple_name IS NOT NULL)
+  )
+);
+CREATE INDEX idx_menu_staples_menu ON menu_staples(weekly_menu_id);
+
 CREATE TABLE shopping_lists (
   id         SERIAL PRIMARY KEY,
   family_id  INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
@@ -148,6 +197,8 @@ CREATE TABLE shopping_list_items (
   category          TEXT NOT NULL DEFAULT '其他',
   qty               NUMERIC NOT NULL DEFAULT 0,
   unit              TEXT NOT NULL DEFAULT '',
+  -- 可选食材单独成行，和必买的分开勾
+  is_optional       BOOLEAN NOT NULL DEFAULT false,
   checked           BOOLEAN NOT NULL DEFAULT false
 );
 CREATE INDEX idx_shopping_items_list ON shopping_list_items(shopping_list_id);

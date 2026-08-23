@@ -6,6 +6,7 @@ import { buildWeekDays, addDays, toDateStr } from '../weekDays.js';
 import { computeDishPlan } from '../portions.js';
 import { resolveWeekStart, normalizeWeekParam, mondayOf } from '../weeks.js';
 import { autoConfirmFinishedWeeks, familyTimeZone } from '../autoConfirm.js';
+import { resolveWeekStaples, computeStaplePlan, toStapleJson } from '../staples.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
@@ -40,6 +41,29 @@ async function findOrCreateMenu(client, familyId, weekStart) {
     [familyId, weekStart]
   );
   return created.rows[0];
+}
+
+// 这一周的主食安排：家庭默认 + 这一周的例外，解析成「每顿配什么」
+async function loadStaples(familyId, weeklyMenuId, days, memberCount) {
+  const [staplesResult, familyResult, overrideResult] = await Promise.all([
+    query('SELECT * FROM staples WHERE family_id=$1 ORDER BY sort_order, id', [familyId]),
+    query('SELECT default_staple_id, staple_meals FROM families WHERE id=$1', [familyId]),
+    weeklyMenuId
+      ? query('SELECT * FROM menu_staples WHERE weekly_menu_id=$1', [weeklyMenuId])
+      : Promise.resolve({ rows: [] }),
+  ]);
+  const staples = staplesResult.rows.map(toStapleJson);
+  const family = {
+    defaultStapleId: familyResult.rows[0]?.default_staple_id ?? null,
+    stapleMeals: familyResult.rows[0]?.staple_meals ?? [],
+  };
+  const { byDate } = resolveWeekStaples(days, overrideResult.rows, family, staples);
+  return {
+    staples,
+    stapleSettings: family,
+    stapleByDate: byDate,
+    staplePlan: computeStaplePlan(byDate, memberCount),
+  };
 }
 
 // 这一周每道菜要做几份（给页面显示"备餐计划"用）
@@ -92,6 +116,7 @@ router.get('/', async (req, res) => {
 
   const days = buildWeekDays(weekStart, slots);
   const { plan, memberCount } = await loadPlan(req.user.familyId, days);
+  const staple = await loadStaples(req.user.familyId, menu?.id ?? null, days, memberCount);
 
   res.json({
     menu: {
@@ -102,6 +127,7 @@ router.get('/', async (req, res) => {
       memberCount,
       confirmedAt: menu?.confirmed_at ?? null,
       exists: !!menu,
+      ...staple,
     },
   });
 });
@@ -183,8 +209,9 @@ router.post('/generate', async (req, res) => {
     );
     const days = buildWeekDays(targetWeekStart, slots.rows);
     const { plan, memberCount } = await loadPlan(familyId, days);
+    const staple = await loadStaples(familyId, weeklyMenuId, days, memberCount);
     res.json({
-      menu: { weekStart: targetWeekStart, days, plan, memberCount, confirmedAt: null },
+      menu: { weekStart: targetWeekStart, days, plan, memberCount, confirmedAt: null, ...staple },
       addedCount,
     });
   } catch (e) {
@@ -264,6 +291,85 @@ router.patch('/slot', async (req, res) => {
     }
     await client.query('COMMIT');
     res.json({ ok: true, recipeIds: ids, eatOut: wantEatOut });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error(e);
+    res.status(500).json({ error: '保存失败' });
+  } finally {
+    client.release();
+  }
+});
+
+// 改某一顿的主食：{ date, mealSlot, stapleId } | { date, mealSlot, none: true } | { date, mealSlot, reset: true }
+//
+//   stapleId  这一顿吃这个（覆盖家庭默认）
+//   none      这一顿不要主食
+//   reset     删掉这一顿的例外，回到跟着家庭默认走
+router.patch('/staple', async (req, res) => {
+  const familyId = req.user.familyId;
+  const { date, mealSlot, stapleId, none, reset } = req.body || {};
+
+  if (!date || !mealSlot) return res.status(400).json({ error: '缺少日期或餐次' });
+  if (!MEAL_SLOTS.includes(mealSlot)) return res.status(400).json({ error: '餐次不对' });
+
+  const weekStart = mondayOf(date);
+  const weekday =
+    WEEKDAY_LABELS[
+      Math.max(0, WEEKDAY_LABELS.findIndex((_, i) => addDays(weekStart, i) === date))
+    ];
+  if (!weekday) return res.status(400).json({ error: '日期不对' });
+
+  // 快照下来：主食以后被改名或删掉，这一顿记的还是当时那个
+  let staple = null;
+  if (!reset && none !== true) {
+    const id = Number(stapleId);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ error: '要么给 stapleId，要么 none:true，要么 reset:true' });
+    }
+    const found = await query('SELECT * FROM staples WHERE id=$1 AND family_id=$2', [id, familyId]);
+    if (found.rows.length === 0) return res.status(400).json({ error: '这个主食不属于你的家庭' });
+    staple = found.rows[0];
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const menu = await findOrCreateMenu(client, familyId, weekStart);
+    if (menu.confirmed_at) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: '这一周已经确认过了（已记入历史），先取消确认再改。' });
+    }
+
+    if (reset) {
+      // 回到默认：把这一顿的例外删掉就行
+      await client.query(
+        'DELETE FROM menu_staples WHERE weekly_menu_id=$1 AND date=$2 AND meal_slot=$3',
+        [menu.id, date, mealSlot]
+      );
+    } else if (none === true) {
+      await client.query(
+        `INSERT INTO menu_staples (weekly_menu_id, date, meal_slot, is_none)
+         VALUES ($1,$2,$3,true)
+         ON CONFLICT (weekly_menu_id, date, meal_slot) DO UPDATE
+           SET is_none=true, staple_id=NULL, staple_name=NULL,
+               amount_per_person=NULL, unit=NULL, category=NULL`,
+        [menu.id, date, mealSlot]
+      );
+    } else {
+      await client.query(
+        `INSERT INTO menu_staples (weekly_menu_id, date, meal_slot, staple_id, staple_name,
+                                   amount_per_person, unit, category, is_none)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false)
+         ON CONFLICT (weekly_menu_id, date, meal_slot) DO UPDATE
+           SET staple_id=EXCLUDED.staple_id, staple_name=EXCLUDED.staple_name,
+               amount_per_person=EXCLUDED.amount_per_person, unit=EXCLUDED.unit,
+               category=EXCLUDED.category, is_none=false`,
+        [menu.id, date, mealSlot, staple.id, staple.name,
+         staple.amount_per_person, staple.unit, staple.category]
+      );
+    }
+    await client.query('COMMIT');
+    res.json({ ok: true });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);

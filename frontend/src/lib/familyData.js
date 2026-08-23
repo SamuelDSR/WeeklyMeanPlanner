@@ -101,3 +101,51 @@ export async function generateShoppingList(week) {
 export async function toggleShoppingItem(itemId) {
   return api.patch(`/shopping/item/${itemId}/toggle`);
 }
+
+// ---------- 主食（米饭 / 面条 / 意面…）----------
+
+// 返回 { staples, settings: { defaultStapleId, stapleMeals } }
+export async function fetchStaples() {
+  return api.get('/staples');
+}
+
+export async function createStaple(data) {
+  return api.post('/staples', data);
+}
+
+export async function updateStaple(id, patch) {
+  return api.patch(`/staples/${id}`, patch);
+}
+
+export async function deleteStaple(id) {
+  return api.delete(`/staples/${id}`);
+}
+
+// { defaultStapleId?, stapleMeals? }
+export async function updateStapleSettings(patch) {
+  return api.patch('/staples/settings', patch);
+}
+
+// 改某一顿的主食。mode: 'set' | 'none' | 'reset'
+//   set    这一顿吃指定的主食
+//   none   这一顿不要主食
+//   reset  回到跟着家庭默认走
+export async function setMealStaple(date, mealSlot, mode, stapleId) {
+  const body = { date, mealSlot };
+  if (mode === 'none') body.none = true;
+  else if (mode === 'reset') body.reset = true;
+  else body.stapleId = stapleId;
+  await api.patch('/menu/staple', body);
+}
+
+// ---------- 用大模型录菜谱 ----------
+
+// 这个功能有没有配置好（没配 LLM_API_KEY 就不显示入口）
+export async function fetchImportStatus() {
+  return api.get('/recipes/import/status');
+}
+
+// 从一段文字或一个网址解析出菜谱草稿。只是预填表单，不落库。
+export async function importRecipeDraft({ text, url }) {
+  return api.post('/recipes/import', url ? { url } : { text });
+}

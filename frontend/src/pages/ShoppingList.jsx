@@ -117,10 +117,21 @@ export default function ShoppingList() {
                 >
                   <span
                     className={`text-sm flex-shrink-0 ${
-                      item.checked ? 'text-ink/30 line-through' : 'text-ink'
+                      item.checked
+                        ? 'text-ink/30 line-through'
+                        : item.isOptional
+                          ? 'text-ink/55'
+                          : 'text-ink'
                     }`}
                   >
                     {item.name}
+                    {/* 可选的单独成行（"土豆 1000 g" 和 "土豆 200 g 可选" 分开勾），
+                        买不买在超市自己定 */}
+                    {item.isOptional && (
+                      <span className="ml-1.5 text-[10px] text-wheat border border-wheat/40 rounded px-1 align-middle">
+                        {t('shopping.optional')}
+                      </span>
+                    )}
                   </span>
                   <span className="flex-1 border-b border-dotted border-mist translate-y-[-3px]" />
                   <span

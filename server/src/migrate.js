@@ -260,6 +260,78 @@ const MIGRATIONS = [
       );
     `,
   },
+  {
+    name: '011_optional_ingredients_staples',
+    sql: `
+      -- 1) 可选食材：有更好，没有也能做（香菜、辣椒这种）
+      ALTER TABLE ingredients ADD COLUMN IF NOT EXISTS is_optional BOOLEAN NOT NULL DEFAULT false;
+      -- 购物清单里可选的单独成行（"土豆 1000 g" 和 "土豆 200 g 可选" 分开勾），
+      -- 免得把可有可无的量混进必买的总量里
+      ALTER TABLE shopping_list_items ADD COLUMN IF NOT EXISTS is_optional BOOLEAN NOT NULL DEFAULT false;
+
+      -- 2) 主食：米饭 / 面条 / 意面这些，和菜一起吃。
+      --    和菜的算法完全不同 —— 菜是整份做的（ceil），主食是按人按顿线性算的，
+      --    所以不能塞进 recipes 里，单独一张表。
+      CREATE TABLE IF NOT EXISTS staples (
+        id                SERIAL PRIMARY KEY,
+        family_id         INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        name              TEXT NOT NULL,
+        amount_per_person NUMERIC NOT NULL DEFAULT 75,   -- 一个人一顿吃多少（生重）
+        unit              TEXT NOT NULL DEFAULT 'g',
+        category          TEXT NOT NULL DEFAULT '干货粮油', -- 购物清单里归到哪一类
+        sort_order        INTEGER NOT NULL DEFAULT 0,
+        created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT staples_amount_check CHECK (amount_per_person > 0)
+      );
+      CREATE INDEX IF NOT EXISTS idx_staples_family ON staples(family_id);
+
+      -- 家庭的默认主食 + 哪几顿配主食。绝大多数情况「晚饭吃米饭」不用点任何按钮。
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS default_staple_id INTEGER
+        REFERENCES staples(id) ON DELETE SET NULL;
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS staple_meals TEXT[] NOT NULL
+        DEFAULT '{午餐,晚餐}';
+
+      -- 某一顿单独指定的主食。**没有行 = 用家庭默认**，所以这张表只存「例外」：
+      --   周三改吃意面   -> 一行，staple_id = 意面
+      --   周四不要主食   -> 一行，is_none = true
+      CREATE TABLE IF NOT EXISTS menu_staples (
+        id                SERIAL PRIMARY KEY,
+        weekly_menu_id    INTEGER NOT NULL REFERENCES weekly_menus(id) ON DELETE CASCADE,
+        date              DATE NOT NULL,
+        meal_slot         TEXT NOT NULL,
+        -- 主食被删掉时，靠下面几个快照字段兜底（和 menu_slots 的 recipe_name 一个思路）
+        staple_id         INTEGER REFERENCES staples(id) ON DELETE SET NULL,
+        staple_name       TEXT,
+        amount_per_person NUMERIC,
+        unit              TEXT,
+        category          TEXT,
+        is_none           BOOLEAN NOT NULL DEFAULT false,
+        UNIQUE (weekly_menu_id, date, meal_slot),
+        CONSTRAINT menu_staples_entry_check CHECK (
+          (is_none AND staple_name IS NULL) OR (NOT is_none AND staple_name IS NOT NULL)
+        )
+      );
+      CREATE INDEX IF NOT EXISTS idx_menu_staples_menu ON menu_staples(weekly_menu_id);
+
+      -- 3) 给每个已有家庭建一套常见主食，并把米饭设成默认。
+      --    这样升级完打开应用就能直接用，不用先去设置页配一遍。
+      INSERT INTO staples (family_id, name, amount_per_person, unit, category, sort_order)
+      SELECT f.id, v.name, v.amt, v.unit, '干货粮油', v.ord
+        FROM families f
+        CROSS JOIN (VALUES
+          ('米饭', 75,  'g', 0),
+          ('面条', 100, 'g', 1),
+          ('意面', 100, 'g', 2),
+          ('馒头', 1,   '个', 3)
+        ) AS v(name, amt, unit, ord)
+       WHERE NOT EXISTS (SELECT 1 FROM staples s WHERE s.family_id = f.id);
+
+      UPDATE families f SET default_staple_id = (
+        SELECT s.id FROM staples s WHERE s.family_id = f.id AND s.name = '米饭'
+         ORDER BY s.id LIMIT 1
+      ) WHERE f.default_staple_id IS NULL;
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

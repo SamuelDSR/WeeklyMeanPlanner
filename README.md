@@ -10,17 +10,22 @@
 - 照片（上传时自动压成主图 1600px + 缩略图 400px，按 EXIF 摆正）→ 第 6 节
 - 做法步骤，每一步可以配图；「跟着做」全屏模式带计时器
 - 一份够几人吃（份数换算的依据）→ 第 8 节
+- **可选食材**：香菜、辣椒这种有更好没有也行的，购物清单里单独一行 → 第 26 节
+- **步骤可拖动排序**（手机上也能拖，另有上/下箭头）→ 第 28 节
+- **用 AI 录菜谱**：贴一段文字或一个网址，模型把表单填好 → 第 29 节
 - 健康分 / 喜好分，两套独立的 1-5 分 → 第 16 节
 - **买现成的**：熟食、冷冻披萨这类，只填「一份买多少」，不用登记食材和做法 → 第 13 节
 
 **每周菜谱**
 - **本周 / 下一周** 两周并行：本周随时改，下一周提前排 → 第 9 节
 - 一顿可以配好几道菜；**出去吃** 的那顿不做饭、不进购物清单 → 第 11、14 节
+- **主食**（米饭 / 面条 / 意面）按人按顿自动配，默认吃什么设一次就行 → 第 27 节
 - 自动排菜只补空格，不会覆盖手工排的；已确认的周受保护 → 第 10 节
 - 「本周备餐」按家庭人数算出每道菜要做几份，菜名可点进做法
 
 **购物清单**
 - 按份数放大用量，同类单位自动合并（1 kg + 200 g 土豆 = 1200 g）→ 第 7、8 节
+- 主食按「每人份量 x 人数 x 顿数」单独算，可选食材单独成行 → 第 26、27 节
 - 按食材分类分组，勾选有离线队列（断网也能勾，联网自动补发）
 
 **做饭提醒**
@@ -936,6 +941,100 @@ docker buildx build --platform linux/amd64 -t <registry>/meal-planner-api:1.0 --
 > 顺带一句：`docker save` / `docker load` 搬镜像**不解决**这个问题 ——
 > 搬过去的还是 arm64 的那份。
 
+### 26. 可选食材
+
+香菜、辣椒、装饰用的白芝麻 —— 有更好，没有也能做。在食材行左边点一下那个圈就标成可选。
+
+购物清单里**单独成行**，不混进必买的量：
+
+```
+土豆  1000 g          <- 必买（两道菜加起来）
+土豆   200 g  可选     <- 可有可无，在超市自己决定
+香菜    20 g  可选
+```
+
+为什么不合成一行：合成 1200 g 之后，你在超市就不知道哪 200 g 是可省的了。
+分开还有个好处 —— 两行各自能勾，买了必买的、跳过可选的，进度照样是对的。
+
+一道菜只填了可选食材（等于没填），生成清单时仍然会提醒你"这道菜没有食材"。
+
+### 27. 主食（米饭 / 面条 / 意面）
+
+中式吃法里主食几乎每顿都有，但它**不是一道菜**，算量的方式完全不同：
+
+```
+菜    一份够 4 人，整份做   ->  ceil(顿数 x 人数 / 4)   多的放冰箱
+主食  每人 75 g 生米，线性  ->  75 x 人数 x 顿数        没有"整份"的概念
+```
+
+所以主食单独一套数据（`staples` 表），不塞进菜品库。
+
+**默认 + 例外**，让「今晚又是米饭」这件事一次都不用点：
+
+```
+设置 -> 主食：默认 米饭 75 g/人，自动配给 午餐 + 晚餐
+   |
+   +-> 周一 ~ 周五 午/晚餐   自动跟着默认   （浅色显示）
+   +-> 周三晚餐 改成意面     在菜单里改一下  （实色显示）
+   +-> 周四晚餐 不要主食     选「不要主食」
+   +-> 出去吃 / 还没排菜的格子   不配主食，也不进购物清单
+```
+
+`menu_staples` 表**只存例外**。所以以后把默认从米饭换成面条，整周自动跟着变，
+不用一顿一顿去回填。哪几顿自动配主食也能改（默认午餐+晚餐，早餐不配）。
+
+购物清单里主食和食材走同一套单位合并：菜谱里也有「意面 150 g」的话，会和主食的意面加在一起。
+
+> 如果你之前用「建一道叫『白米饭』的菜」来凑，现在可以把那道菜删掉了 —— 否则大米会被算两遍。
+
+### 28. 步骤拖动排序
+
+做法步骤左边有个把手，按住拖就能换顺序，手指越过相邻那一步的中线就交换。
+
+用的是 Pointer Events，不是 HTML5 的 drag-and-drop —— 后者在手机上根本不触发，
+而这个应用主要就是在厨房里拿手机看的。把手上加了 `touch-action: none`，
+否则手机上一拖就变成页面滚动。
+
+把手下面还有上/下箭头：键盘和读屏用户没法拖，小屏上精细拖动也别扭。
+
+### 29. 用 AI 把菜谱填进来
+
+手工敲食材和步骤挺费劲。菜谱表单顶上有「用 AI 帮我填」：贴一段菜谱文字，或者给一个网址，
+模型解析出来直接填进表单，**你改完再自己按保存**。
+
+这个功能默认关着。配好 key 才会出现入口：
+
+```bash
+# .env —— 用 Anthropic
+LLM_API_KEY=sk-ant-...
+LLM_MODEL=claude-sonnet-5        # 可省，默认就是它
+
+# 或者任何 OpenAI 兼容的接口（本地 Ollama / vLLM / LM Studio 都行）
+LLM_PROVIDER=openai
+LLM_API_KEY=whatever             # 本地服务随便填个非空值
+LLM_BASE_URL=http://ollama:11434/v1
+LLM_MODEL=qwen2.5:14b
+```
+
+改完 `docker compose up -d api`。没配 `LLM_API_KEY` 的话整个面板不显示，其它功能一点不受影响。
+
+**几个刻意的设计**：
+
+- **只预填，不落库。** 模型会看错、会漏、会把 1 cup 换错。解析结果只是填进表单的草稿。
+- **输出一律清洗一遍。** 模型返回的分类 / 单位 / 数量都不可信，服务端按自己的枚举
+  再过一遍：不认识的分类落到默认值，负数归零，`isOptional` 只认真正的布尔 `true`，
+  食材上限 60 条、步骤 40 步。原文标了「optional / facultatif」的会自动标成可选食材。
+- **抓网址是 SSRF 高危动作**，所以每一跳都查：只允许 http/https；域名解析出来的 IP
+  不能是内网 / 环回 / 链路本地（`169.254.169.254` 那个云元数据地址尤其要拦）；
+  重定向手动跟（fetch 自动跟的话第二跳就绕过检查了）；12 秒超时、2 MB 上限。
+
+  IPv6 那边要特别小心：URL 解析器会把 `http://[::ffff:127.0.0.1]` 规范化成
+  `::ffff:7f00:1`，看着完全不像本机地址。所以判断是把 IPv6 展开成 8 组、
+  把嵌在里面的 IPv4 抠出来再判，不靠字符串前缀。
+- **限流**：同一个人 3 秒一次、一小时 40 次 —— 调用是要花钱的。
+
+抓不到内容（需要登录、纯图片站）会直接告诉你「试试直接把菜谱贴进来」。
+
 ### 25. 配置你的 nginx
 
 参考项目里的 `nginx-example.conf`，核心是把 `meal.xxx.fr` 反向代理到
@@ -1003,6 +1102,7 @@ meal-planner/
 │   │   ├── units.js         单位表 + 换算（哪些单位能相加）
 │   │   ├── shoppingAggregate.js 购物清单汇总（合并同类单位 + 按份数放大）
 │   │   ├── portions.js      份数换算：一道菜这一周要做几份（买现成的算"买几个"）
+│   │   ├── staples.js      主食：默认+例外的解析、按人按顺算总量
 │   │   ├── inviteCode.js    家庭邀请码生成（去掉易混字符）
 │   │   ├── historyStats.js  历史汇总统计（纯函数）
 │   │   ├── weekDays.js      一周 7 天 x 4 餐的骨架
@@ -1014,7 +1114,9 @@ meal-planner/
 │   │       ├── family.js    家庭管理：改名/邀请码/成员/转让/退出
 │   │       ├── history.js   过去几周吃了什么（逐餐记录 + 汇总）
 │   │       ├── recipes.js   菜品库 CRUD + 图片上传
-│   │       ├── menu.js      本周菜谱：查询/生成/手动调整
+│   │       ├── menu.js      本周菜谱：查询/生成/手动调整/改某顿的主食
+│   │       ├── staples.js   主食清单 CRUD + 默认主食设置
+│   │       ├── recipeImport.js 从文字/网址解析菜谱草稿（限流在这里）
 │   │       └── shopping.js  购物清单：查询/生成/勾选
 │   └── .env.example         本地开发用的环境变量
 └── frontend/                前端（React + Vite + Tailwind）
@@ -1037,13 +1139,14 @@ meal-planner/
 
 ```
 families              id, name, invite_code, member_count, owner_id, timezone,
-                      meal_times, notify_enabled, notify_lead_minutes
+                      meal_times, notify_enabled, notify_lead_minutes,
+                      default_staple_id, staple_meals[]
 users                 id, email, password_hash, display_name, family_id,
                       status(pending/approved/rejected), is_admin, approved_at, approved_by
 recipes               id, family_id, name, category, meals[], time_minutes, servings,
                        is_store_bought, health_score, like_score,
                        tags[], last_cooked_date, photo_url, thumb_url
-ingredients            recipe_id, name, amount, unit, category
+ingredients            recipe_id, name, amount, unit, category, is_optional
 steps                  recipe_id, sort_order, title, content, timer_seconds,
                        photo_url, thumb_url
 weekly_menus           id, family_id, week_start, confirmed_at
@@ -1051,7 +1154,12 @@ menu_slots             weekly_menu_id, date, weekday, meal_slot, recipe_id, reci
                        is_eat_out, like_score, health_score
                        （一格可多行 = 一顿多道菜；recipe_name 是快照，删菜谱也留着）
 shopping_lists         id, family_id, week_start
-shopping_list_items    shopping_list_id, name, category, qty, unit, checked
+shopping_list_items    shopping_list_id, name, category, qty, unit, is_optional, checked
+staples                id, family_id, name, amount_per_person, unit, category, sort_order
+                       （主食清单，家庭自己维护）
+menu_staples           weekly_menu_id, date, meal_slot, staple_id, staple_name,
+                       amount_per_person, unit, category, is_none
+                       （**只存例外**：没有行就是跟着 families.default_staple_id 走）
 ```
 
 ## 五、数据备份

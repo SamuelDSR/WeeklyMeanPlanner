@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Camera, Loader2, X, ShoppingBag } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Camera, Loader2, X, ShoppingBag, CircleDashed, CheckCircle2 } from 'lucide-react';
 import {
   saveRecipe,
   deleteRecipe,
@@ -10,6 +10,8 @@ import {
 import PhotoUpload from '../components/PhotoUpload';
 import { fetchUnitGroups } from '../lib/unitOptions';
 import ScorePicker from '../components/ScorePicker';
+import SortableList from '../components/SortableList';
+import RecipeImportPanel from '../components/RecipeImportPanel';
 import { useI18n } from '../i18n';
 import { domainLabel } from '../i18n/domain';
 
@@ -22,7 +24,7 @@ const ING_CATEGORY_OPTIONS = ['蔬菜类', '水果类', '肉禽类', '水产类'
 let idCounter = 0;
 const nextId = () => `tmp_${Date.now()}_${idCounter++}`;
 
-const emptyIngredient = () => ({ id: nextId(), name: '', amount: '', unit: '', category: '蔬菜类' });
+const emptyIngredient = () => ({ id: nextId(), name: '', amount: '', unit: '', category: '蔬菜类', isOptional: false });
 const emptyStep = () => ({ id: nextId(), title: '', content: '', timerSeconds: '', photoURL: null, thumbURL: null });
 
 export default function RecipeForm() {
@@ -76,7 +78,11 @@ export default function RecipeForm() {
         setTags((found.tags || []).join(','));
         setPhotoURL(found.photoURL || null);
         setThumbURL(found.thumbURL || null);
-        setIngredients(found.ingredients?.length ? found.ingredients : [emptyIngredient()]);
+        setIngredients(
+          found.ingredients?.length
+            ? found.ingredients.map((i) => ({ ...i, isOptional: i.isOptional === true }))
+            : [emptyIngredient()]
+        );
         setSteps(found.steps?.length ? found.steps : [emptyStep()]);
         setLoaded(true);
       } catch (err) {
@@ -121,7 +127,12 @@ export default function RecipeForm() {
     try {
       const cleanIngredients = ingredients
         .filter((i) => i.name.trim())
-        .map((i, idx) => ({ ...i, amount: Number(i.amount) || 0, order: idx }));
+        .map((i, idx) => ({
+          ...i,
+          amount: Number(i.amount) || 0,
+          isOptional: i.isOptional === true,
+          order: idx,
+        }));
       const cleanSteps = steps
         .filter((s) => s.content.trim())
         .map((s, idx) => ({
@@ -169,6 +180,35 @@ export default function RecipeForm() {
     }
   }
 
+  // 大模型解析出来的草稿灌进表单。**只填不存** —— 用户过一遍再自己按保存。
+  // 每行都要重新发一个本地 id，React 的 key 和拖动排序都靠它。
+  function applyDraft(draft) {
+    if (!draft) return;
+    setName(draft.name || '');
+    if (draft.category) setCategory(draft.category);
+    if (draft.meals?.length) setMeals(draft.meals);
+    if (draft.timeMinutes != null) setTimeMinutes(draft.timeMinutes);
+    if (draft.servings != null) setServings(draft.servings);
+    if (draft.tags?.length) setTags(draft.tags.join(','));
+    setIsStoreBought(false); // 解析出来的都是要自己做的菜
+    setIngredients(
+      draft.ingredients?.length
+        ? draft.ingredients.map((i) => ({ ...i, id: nextId(), amount: String(i.amount ?? '') }))
+        : [emptyIngredient()]
+    );
+    setSteps(
+      draft.steps?.length
+        ? draft.steps.map((st) => ({
+            ...st,
+            id: nextId(),
+            timerSeconds: st.timerSeconds ? String(st.timerSeconds) : '',
+            photoURL: null,
+            thumbURL: null,
+          }))
+        : [emptyStep()]
+    );
+  }
+
   async function handlePhotoUpload(file) {
     const { photoURL: url, thumbURL: thumb } = await uploadRecipePhoto(file);
     setPhotoURL(url);
@@ -198,6 +238,10 @@ export default function RecipeForm() {
       <h2 className="font-display font-bold text-xl mb-4">{isEditing ? t('recipe.editTitle') : t('recipe.newTitle')}</h2>
 
       <form onSubmit={handleSubmit} className="space-y-5">
+        {/* 手工录菜谱挺费劲的：贴一段文字或一个网址，让模型先填一遍。
+            只在新建时给：编辑已有菜谱时一键覆盖太容易误伤。 */}
+        {!isEditing && <RecipeImportPanel onFill={applyDraft} />}
+
         <PhotoUpload photoURL={photoURL} onUpload={handlePhotoUpload} onRemove={() => {
             setPhotoURL(null);
             setThumbURL(null);
@@ -380,9 +424,26 @@ export default function RecipeForm() {
                 <Plus size={14} /> {t('recipe.addRow')}
               </button>
             </div>
+            <p className="text-[11px] text-ink/35 mb-1.5 flex items-center gap-1">
+              <CircleDashed size={11} className="text-wheat" /> {t('recipe.optionalHint')}
+            </p>
             <div className="space-y-2">
               {ingredients.map((ing, idx) => (
-                <div key={ing.id} className="flex gap-1.5 items-center">
+                <div
+                  key={ing.id}
+                  className={`flex gap-1.5 items-center ${ing.isOptional ? 'opacity-70' : ''}`}
+                >
+                  {/* 可选食材：香菜、辣椒这种，有更好、没有也能做。
+                      购物清单里会单独成行标出来，不混进必买的量。 */}
+                  <button
+                    type="button"
+                    onClick={() => updateIngredient(idx, { isOptional: !ing.isOptional })}
+                    title={ing.isOptional ? t('recipe.optionalOn') : t('recipe.optionalOff')}
+                    aria-pressed={!!ing.isOptional}
+                    className={`shrink-0 p-1 ${ing.isOptional ? 'text-wheat' : 'text-ink/20'}`}
+                  >
+                    {ing.isOptional ? <CircleDashed size={16} /> : <CheckCircle2 size={16} />}
+                  </button>
                   <input
                     placeholder={t('recipe.ingredientName')}
                     value={ing.name}
@@ -448,9 +509,12 @@ export default function RecipeForm() {
                 <Plus size={14} /> {t('recipe.addStep')}
               </button>
             </div>
-            <div className="space-y-3">
-              {steps.map((s, idx) => (
-                <div key={s.id} className="border border-mist rounded-lg p-2.5 bg-white">
+            {/* 步骤可以拖着换顺序（手机上也能拖），旁边还有上/下箭头兜底 */}
+            <SortableList
+              items={steps}
+              onReorder={setSteps}
+              renderItem={(s, idx) => (
+                <div className="border border-mist rounded-lg p-2.5 bg-white">
                   <div className="flex gap-2 mb-1.5">
                     <span className="font-mono text-xs text-wheat font-bold pt-2">{idx + 1}</span>
                     <input
@@ -518,8 +582,8 @@ export default function RecipeForm() {
                     )}
                   </div>
                 </div>
-              ))}
-            </div>
+              )}
+            />
           </div>
 
           </>

@@ -1,10 +1,62 @@
-import { X, Plus, UtensilsCrossed } from 'lucide-react';
+import { X, Plus, UtensilsCrossed, Wheat } from 'lucide-react';
 import { MEAL_SLOTS } from '../lib/constants';
 import { useI18n } from '../i18n';
 import { domainLabel } from '../i18n/domain';
 
+// 一顿饭的主食选择器。
+//
+// 值的三种情况：
+//   ''      跟着家庭默认（后端删掉这一顿的例外）
+//   'none'  这一顿不要主食
+//   '<id>'  指定某个主食
+function StapleRow({ staple, staples, onSelect, t, locale }) {
+  // 当前实际吃的是什么：解析结果为空就是「没有主食」
+  const current = staple ? String(staple.stapleId ?? '') : 'none';
+  const isDefault = staple?.source === 'default';
+
+  return (
+    <div className="flex items-center gap-1 mt-1.5 pt-1.5 border-t border-mist/60">
+      <Wheat size={11} className={isDefault ? 'text-ink/25 shrink-0' : 'text-wheat shrink-0'} />
+      <select
+        value={staple?.source === 'default' ? '' : current}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (v === '') onSelect('reset');
+          else if (v === 'none') onSelect('none');
+          else onSelect('set', Number(v));
+        }}
+        className={`flex-1 min-w-0 text-[11px] px-1 py-1 rounded border-0 bg-transparent outline-none ${
+          isDefault ? 'text-ink/40' : 'text-wheat font-medium'
+        }`}
+        title={t('menu.stapleTitle')}
+      >
+        {/* 「跟随默认」这一项的文字里带上默认到底是什么，不用去设置页查 */}
+        <option value="">
+          {staple && isDefault
+            ? t('menu.stapleDefaultIs', { name: domainLabel(locale, 'staple', staple.name) })
+            : t('menu.stapleFollowDefault')}
+        </option>
+        {staples.map((s) => (
+          <option key={s.id} value={s.id}>
+            {domainLabel(locale, 'staple', s.name)}
+          </option>
+        ))}
+        <option value="none">{t('menu.stapleNone')}</option>
+      </select>
+    </div>
+  );
+}
+
 // 一天的四餐。每一顿可以配好几道菜：已选的用小标签列出来，下面的下拉框往里加菜。
-export default function MenuDayCard({ day, recipes, onChangeSlot, onToggleEatOut }) {
+export default function MenuDayCard({
+  day,
+  recipes,
+  staples = [],
+  stapleByMeal = {},
+  onChangeSlot,
+  onToggleEatOut,
+  onSetStaple,
+}) {
   const { t, locale, formatWeekday } = useI18n();
   const recipeName = (id) => recipes.find((r) => r.id === id)?.name || t('menu.deletedRecipe');
   const optionsFor = (meal, chosen) =>
@@ -94,6 +146,18 @@ export default function MenuDayCard({ day, recipes, onChangeSlot, onToggleEatOut
                     <Plus size={10} /> {t('menu.noDishForMeal')}
                   </p>
                 )
+              )}
+
+              {/* 主食（米饭 / 面条…）。跟着家庭默认走的显示成浅色，
+                  这一顿单独改过的显示成实色 —— 一眼能看出哪顿是特意换过的。 */}
+              {staples.length > 0 && (
+                <StapleRow
+                  staple={stapleByMeal[meal]}
+                  staples={staples}
+                  onSelect={(mode, id) => onSetStaple(day.date, meal, mode, id)}
+                  t={t}
+                  locale={locale}
+                />
               )}
                 </>
               )}

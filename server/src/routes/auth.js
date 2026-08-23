@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
-import { query } from '../db.js';
+import { query, pool } from '../db.js';
 import { signToken, setAuthCookie, clearAuthCookie, requireAuth } from '../auth.js';
 import { USER_STATUS, statusMessage } from '../userStatus.js';
 import { validateRegistration, normalizeEmail } from '../validate.js';
 import { shouldBecomeAdmin } from '../adminBootstrap.js';
 import { makeUniqueInviteCode } from '../inviteCode.js';
+import { seedFamilyStaples } from '../staples.js';
 
 const router = Router();
 
@@ -124,13 +125,27 @@ router.post('/family/create', requireAuth, async (req, res) => {
 
   // 建家庭的人就是创建者，之后由他管理这个家庭
   const inviteCode = await makeUniqueInviteCode(query);
-  const famResult = await query(
-    `INSERT INTO families (name, invite_code, owner_id) VALUES ($1,$2,$3)
-     RETURNING id, name, invite_code, member_count, owner_id`,
-    [name.trim(), inviteCode, req.user.userId]
-  );
-  const family = famResult.rows[0];
-  await query('UPDATE users SET family_id = $1 WHERE id = $2', [family.id, req.user.userId]);
+  const client = await pool.connect();
+  let family;
+  try {
+    await client.query('BEGIN');
+    const famResult = await client.query(
+      `INSERT INTO families (name, invite_code, owner_id) VALUES ($1,$2,$3)
+       RETURNING id, name, invite_code, member_count, owner_id`,
+      [name.trim(), inviteCode, req.user.userId]
+    );
+    family = famResult.rows[0];
+    await client.query('UPDATE users SET family_id = $1 WHERE id = $2', [family.id, req.user.userId]);
+    // 开箱就有米饭/面条/意面/馒头，默认米饭 —— 不用先去设置页配一遍
+    await seedFamilyStaples(client, family.id);
+    await client.query('COMMIT');
+  } catch (e) {
+    await client.query('ROLLBACK');
+    console.error(e);
+    return res.status(500).json({ error: '建家庭失败' });
+  } finally {
+    client.release();
+  }
 
   const token = signToken({ userId: req.user.userId, familyId: family.id });
   setAuthCookie(res, token);

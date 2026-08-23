@@ -5,6 +5,7 @@ import { buildShoppingList } from '../shoppingAggregate.js';
 import { buildWeekDays } from '../weekDays.js';
 import { resolveWeekStart, normalizeWeekParam } from '../weeks.js';
 import { autoConfirmFinishedWeeks, familyTimeZone } from '../autoConfirm.js';
+import { resolveWeekStaples, computeStaplePlan, toStapleJson } from '../staples.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
@@ -29,14 +30,16 @@ router.get('/', async (req, res) => {
   if (!list) return res.json({ list: null, week: which, weekStart });
 
   const items = await query(
-    'SELECT id, name, category, qty, unit, checked FROM shopping_list_items WHERE shopping_list_id=$1 ORDER BY category, name',
+    `SELECT id, name, category, qty, unit, is_optional, checked
+       FROM shopping_list_items WHERE shopping_list_id=$1
+      ORDER BY category, is_optional, name`,
     [list.id]
   );
   res.json({
     list: {
       week: which,
       weekStart,
-      items: items.rows.map((i) => ({ ...i, qty: Number(i.qty) })),
+      items: items.rows.map((i) => ({ ...i, qty: Number(i.qty), isOptional: i.is_optional })),
     },
   });
 });
@@ -59,7 +62,9 @@ router.post('/generate', async (req, res) => {
     }
 
     const slotsRaw = await client.query(
-      'SELECT date, weekday, meal_slot, recipe_id FROM menu_slots WHERE weekly_menu_id=$1',
+      // is_eat_out 一定要选出来：buildWeekDays 靠它区分「出去吃」和「排了菜」。
+      // 少了这一列，出去吃的那几顿会被当成有菜，主食就会白买一份。
+      'SELECT date, weekday, meal_slot, recipe_id, is_eat_out FROM menu_slots WHERE weekly_menu_id=$1',
       [menu.id]
     );
     const recipeIds = Array.from(
@@ -73,13 +78,13 @@ router.post('/generate', async (req, res) => {
         [recipeIds]
       );
       const ingResult = await client.query(
-        'SELECT recipe_id, name, amount, unit, category FROM ingredients WHERE recipe_id = ANY($1)',
+        'SELECT recipe_id, name, amount, unit, category, is_optional FROM ingredients WHERE recipe_id = ANY($1)',
         [recipeIds]
       );
       const ingByRecipe = {};
       ingResult.rows.forEach((i) => {
         if (!ingByRecipe[i.recipe_id]) ingByRecipe[i.recipe_id] = [];
-        ingByRecipe[i.recipe_id].push(i);
+        ingByRecipe[i.recipe_id].push({ ...i, isOptional: i.is_optional === true });
       });
       recipesResult.rows.forEach((r) => {
         const ings = ingByRecipe[r.id] || [];
@@ -87,8 +92,11 @@ router.post('/generate', async (req, res) => {
           name: r.name,
           servings: r.servings,
           isStoreBought: r.is_store_bought,
-          purchase: r.is_store_bought && ings[0]
-            ? { qty: Number(ings[0].amount), unit: ings[0].unit }
+          purchase: r.is_store_bought && ings.find((i) => !i.isOptional)
+            ? (() => {
+                const first = ings.find((i) => !i.isOptional);
+                return { qty: Number(first.amount), unit: first.unit };
+              })()
             : null,
           ingredients: ings,
         });
@@ -100,7 +108,30 @@ router.post('/generate', async (req, res) => {
     const memberCount = familyResult.rows[0]?.member_count ?? 2;
 
     const days = buildWeekDays(menu.week_start, slotsRaw.rows);
-    const { items, missingDishNames, plan } = buildShoppingList(days, recipesById, memberCount);
+
+    // 主食：家庭默认 + 这一周的例外 -> 每人份量 x 人数 x 顿数
+    const [staplesResult, stapleSettings, overrides] = await Promise.all([
+      client.query('SELECT * FROM staples WHERE family_id=$1 ORDER BY sort_order, id', [familyId]),
+      client.query('SELECT default_staple_id, staple_meals FROM families WHERE id=$1', [familyId]),
+      client.query('SELECT * FROM menu_staples WHERE weekly_menu_id=$1', [menu.id]),
+    ]);
+    const { byDate } = resolveWeekStaples(
+      days,
+      overrides.rows,
+      {
+        defaultStapleId: stapleSettings.rows[0]?.default_staple_id ?? null,
+        stapleMeals: stapleSettings.rows[0]?.staple_meals ?? [],
+      },
+      staplesResult.rows.map(toStapleJson)
+    );
+    const staplePlan = computeStaplePlan(byDate, memberCount);
+
+    const { items, missingDishNames, plan } = buildShoppingList(
+      days,
+      recipesById,
+      memberCount,
+      staplePlan
+    );
 
     const listResult = await client.query(
       `INSERT INTO shopping_lists (family_id, week_start) VALUES ($1,$2)
@@ -113,13 +144,14 @@ router.post('/generate', async (req, res) => {
 
     for (const item of items) {
       await client.query(
-        `INSERT INTO shopping_list_items (shopping_list_id, name, category, qty, unit) VALUES ($1,$2,$3,$4,$5)`,
-        [listId, item.name, item.category, item.qty, item.unit]
+        `INSERT INTO shopping_list_items (shopping_list_id, name, category, qty, unit, is_optional)
+         VALUES ($1,$2,$3,$4,$5,$6)`,
+        [listId, item.name, item.category, item.qty, item.unit, item.isOptional === true]
       );
     }
 
     await client.query('COMMIT');
-    res.json({ list: { weekStart, items }, missingDishNames, plan, memberCount });
+    res.json({ list: { weekStart, items }, missingDishNames, plan, staplePlan, memberCount });
   } catch (e) {
     await client.query('ROLLBACK');
     console.error(e);

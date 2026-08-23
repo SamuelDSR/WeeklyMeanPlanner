@@ -191,8 +191,16 @@ export default function RecipeDetail() {
         <ul className="divide-y divide-mist border-y border-mist">
           {(recipe.ingredients || []).map((ing) => (
             <li key={ing.id} className="flex justify-between py-2 text-sm">
-              <span>{ing.name}</span>
-              <span className="font-mono text-ink/50">
+              <span className={ing.isOptional ? 'text-ink/50' : ''}>
+                {ing.name}
+                {/* 可选食材：没有也能做，去超市可以不买 */}
+                {ing.isOptional && (
+                  <span className="ml-1.5 text-[10px] text-wheat border border-wheat/40 rounded px-1 py-0.5 align-middle">
+                    {t('recipe.optional')}
+                  </span>
+                )}
+              </span>
+              <span className={`font-mono ${ing.isOptional ? 'text-ink/35' : 'text-ink/50'}`}>
                 {ing.amount} {domainLabel(locale, 'unit', ing.unit)}
               </span>
             </li>

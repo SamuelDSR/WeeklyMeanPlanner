@@ -31,6 +31,21 @@ const INGREDIENT_CATEGORIES = {
   其他: { en: 'Other', fr: 'Autre' },
 };
 
+// 主食名：家庭自己建的（staples.name），常见的几个给个译名，
+// 自己新增的名字认不出来就原样显示
+const STAPLES = {
+  米饭: { en: 'Rice', fr: 'Riz' },
+  面条: { en: 'Noodles', fr: 'Nouilles' },
+  意面: { en: 'Pasta', fr: 'Pâtes' },
+  馒头: { en: 'Steamed bun', fr: 'Pain vapeur' },
+  米粉: { en: 'Rice noodles', fr: 'Nouilles de riz' },
+  面包: { en: 'Bread', fr: 'Pain' },
+  土豆: { en: 'Potatoes', fr: 'Pommes de terre' },
+  玉米: { en: 'Corn', fr: 'Maïs' },
+  藜麦: { en: 'Quinoa', fr: 'Quinoa' },
+  粥: { en: 'Congee', fr: 'Congee' },
+};
+
 // 单位：g/kg/ml/L 各语言一样，不用翻；中文特有的和"适量"这类要翻
 const UNITS = {
   斤: { en: 'jin (500g)', fr: 'jin (500g)' },
@@ -68,6 +83,7 @@ const UNIT_GROUPS = {
 };
 
 const TABLES = {
+  staple: STAPLES,
   meal: MEALS,
   recipeCategory: RECIPE_CATEGORIES,
   ingredientCategory: INGREDIENT_CATEGORIES,
@@ -75,7 +91,7 @@ const TABLES = {
   unitGroup: UNIT_GROUPS,
 };
 
-// kind: meal | recipeCategory | ingredientCategory | unit | unitGroup
+// kind: staple | meal | recipeCategory | ingredientCategory | unit | unitGroup
 export function domainLabel(locale, kind, value) {
   if (!value) return value ?? '';
   if (locale === 'zh') return value;

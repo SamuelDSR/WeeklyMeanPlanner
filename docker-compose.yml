@@ -33,6 +33,11 @@ services:
       # 这里 cookie 的 secure 标志设成 true，配合 nginx 转发 X-Forwarded-Proto 使用。
       # 想不经过 nginx、直接用 http 访问来调试时，在 .env 里设 COOKIE_SECURE=false
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      # 大模型（可选）：不填 LLM_API_KEY 就不会出现「用 AI 帮我填」
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+      LLM_MODEL: ${LLM_MODEL:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       # 管理员账号的邮箱：这个邮箱注册时会自动成为管理员并直接通过审核。
       # 留空的话，数据库里第一个注册的账号自动成为管理员。
       ADMIN_EMAIL: ${ADMIN_EMAIL:-}

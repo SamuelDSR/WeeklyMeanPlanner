@@ -16,6 +16,8 @@ import unitRoutes from './routes/units.js';
 import familyRoutes from './routes/family.js';
 import historyRoutes from './routes/history.js';
 import pushRoutes from './routes/push.js';
+import stapleRoutes from './routes/staples.js';
+import recipeImportRoutes from './routes/recipeImport.js';
 
 import { runMigrations } from './migrate.js';
 import { bootstrapAdmin } from './adminBootstrap.js';
@@ -49,6 +51,7 @@ app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '30d' }));
 
 // API 路由
 app.use('/api/auth', authRoutes);
+app.use('/api/recipes/import', recipeImportRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/shopping', shoppingRoutes);
@@ -57,6 +60,7 @@ app.use('/api/units', unitRoutes);
 app.use('/api/family', familyRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/push', pushRoutes);
+app.use('/api/staples', stapleRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -174,6 +174,7 @@ async function upsertRecipe(client, familyId, recipeId, body) {
           amount: Number(ingredients[0]?.amount) || 1,
           unit: ingredients[0]?.unit || '份',
           category: ingredients[0]?.category || '其他',
+          isOptional: false, // 买现成的就是要买的东西，不存在"可选"
         },
       ]
     : ingredients;
@@ -233,8 +234,10 @@ async function upsertRecipe(client, familyId, recipeId, body) {
   for (let i = 0; i < normalizedIngredients.length; i++) {
     const ing = normalizedIngredients[i];
     await client.query(
-      `INSERT INTO ingredients (recipe_id, name, amount, unit, category, sort_order) VALUES ($1,$2,$3,$4,$5,$6)`,
-      [id, ing.name, Number(ing.amount) || 0, ing.unit || '', ing.category || '其他', i]
+      `INSERT INTO ingredients (recipe_id, name, amount, unit, category, is_optional, sort_order)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [id, ing.name, Number(ing.amount) || 0, ing.unit || '', ing.category || '其他',
+       ing.isOptional === true, i]
     );
   }
   for (let i = 0; i < normalizedSteps.length; i++) {
@@ -289,6 +292,7 @@ export function toRecipeJson(r, ingredients = [], steps = []) {
       amount: Number(i.amount),
       unit: i.unit,
       category: i.category,
+      isOptional: i.is_optional === true,
     })),
     steps: steps.map((s) => ({
       id: s.id,

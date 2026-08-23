@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Users, ChefHat, ShoppingBag } from 'lucide-react';
+import { Users, ChefHat, ShoppingBag, Wheat } from 'lucide-react';
 import { useI18n } from '../i18n';
 import { domainLabel } from '../i18n/domain';
 
@@ -9,7 +9,7 @@ import { domainLabel } from '../i18n/domain';
 //   出现 4 顿 x 家里 3 口 = 12 人份，一份够 4 人 -> 做 3 份
 //
 // 份数是服务端算的（server/src/portions.js），这里只负责显示。
-export default function MealPlanSummary({ plan, memberCount, onChangeMemberCount }) {
+export default function MealPlanSummary({ plan, staplePlan, memberCount, onChangeMemberCount }) {
   const { t, locale } = useI18n();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(memberCount ?? 2);
@@ -103,6 +103,27 @@ export default function MealPlanSummary({ plan, memberCount, onChangeMemberCount
         </ul>
       ) : (
         <p className="text-xs text-ink/35 mt-2">{t('menu.planEmpty')}</p>
+      )}
+
+      {/* 主食单独一段：它的算法和菜不一样，每人份量 x 人数 x 顿数，没有"整份"的概念 */}
+      {staplePlan?.length > 0 && (
+        <ul className="mt-2 pt-2 border-t border-mist space-y-1">
+          {staplePlan.map((s) => (
+            <li key={`${s.name}|${s.unit}`} className="flex items-baseline justify-between text-sm">
+              <span className="flex items-center gap-1 text-ink/70 min-w-0 truncate">
+                <Wheat size={12} className="text-wheat shrink-0" />
+                {domainLabel(locale, 'staple', s.name)}
+              </span>
+              <span className="text-ink/50 text-xs font-mono shrink-0 ml-2">
+                {t('menu.stapleLine', { meals: s.meals })}
+                <span className="text-wheat font-bold">
+                  {' '}
+                  {s.qty} {domainLabel(locale, 'unit', s.unit)}
+                </span>
+              </span>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

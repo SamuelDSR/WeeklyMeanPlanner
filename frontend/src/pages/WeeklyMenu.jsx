@@ -11,6 +11,7 @@ import {
   unconfirmMenu,
   fetchWeeklyMenu,
   generateShoppingList,
+  setMealStaple,
 } from '../lib/familyData';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
@@ -117,6 +118,17 @@ export default function WeeklyMenu() {
     }
   }
 
+  // 改某一顿的主食。份量是服务端算的，所以改完直接重拉这一周。
+  async function handleSetStaple(date, meal, mode, stapleId) {
+    bumpVersion();
+    try {
+      await setMealStaple(date, meal, mode, stapleId);
+      setMenu(await fetchWeeklyMenu(week));
+    } catch (e) {
+      setNotice(e.message || t('common.saveFailed'));
+    }
+  }
+
   async function handleConfirm() {
     bumpVersion();
     setBusy(true);
@@ -197,6 +209,7 @@ export default function WeeklyMenu() {
         <>
           <MealPlanSummary
             plan={menu.plan}
+            staplePlan={menu.staplePlan}
             memberCount={menu.memberCount ?? family?.memberCount}
             onChangeMemberCount={handleChangeMemberCount}
           />
@@ -230,8 +243,11 @@ export default function WeeklyMenu() {
                 key={day.date}
                 day={day}
                 recipes={recipes}
+                staples={menu.staples || []}
+                stapleByMeal={menu.stapleByDate?.[day.date] || {}}
                 onChangeSlot={handleChangeSlot}
                 onToggleEatOut={handleToggleEatOut}
+                onSetStaple={handleSetStaple}
               />
             ))}
           </div>

@@ -6,12 +6,14 @@ import AccountSettingsPanel from '../components/AccountSettingsPanel';
 import NotificationPanel from '../components/NotificationPanel';
 import { fetchFamily } from '../lib/familyAdmin';
 import FamilyPanel from '../components/FamilyPanel';
+import StaplePanel from '../components/StaplePanel';
 import UserApprovalPanel from '../components/UserApprovalPanel';
 import { useI18n } from '../i18n';
 
 // 一个 tab 装三段，按"跟谁有关"从近到远排：
 //   账号设置   -> 只跟你自己有关，人人可见
 //   家庭管理   -> 跟你家有关，加入了家庭才显示（改设置的权限在里面再判断）
+//   主食设置   -> 也是家庭级的：默认吃什么主食、每人一顿多少
 //   用户审核   -> 跟整个应用有关，只有应用管理员看得到
 export default function Settings() {
   const { t } = useI18n();
@@ -40,6 +42,9 @@ export default function Settings() {
       {family && familyDetail && (
         <NotificationPanel family={familyDetail} onFamilyChange={setFamilyDetail} />
       )}
+
+      {/* 主食设置：默认吃什么主食、每人一顿多少 —— 购物清单靠它算量 */}
+      {family && <StaplePanel />}
 
       {family ? (
         <FamilyPanel />
