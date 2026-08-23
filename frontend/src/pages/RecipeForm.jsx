@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Plus, Trash2, ArrowLeft, Camera, Loader2, X, ShoppingBag, CircleDashed, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, Camera, Loader2, X, ShoppingBag, CircleDashed, CheckCircle2, GripVertical } from 'lucide-react';
 import {
   saveRecipe,
   deleteRecipe,
@@ -509,6 +509,12 @@ export default function RecipeForm() {
                 <Plus size={14} /> {t('recipe.addStep')}
               </button>
             </div>
+            {/* 能拖这件事得明说一句，不然没人会想到去试 */}
+            {steps.length > 1 && (
+              <p className="text-[11px] text-ink/40 mb-1.5 flex items-center gap-1">
+                <GripVertical size={11} /> {t('recipe.reorderHint')}
+              </p>
+            )}
             {/* 步骤可以拖着换顺序（手机上也能拖），旁边还有上/下箭头兜底 */}
             <SortableList
               items={steps}

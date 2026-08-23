@@ -72,42 +72,49 @@ export default function SortableList({ items, onReorder, renderItem, itemClassNa
           ref={(el) => {
             rowRefs.current[index] = el;
           }}
-          className={`flex gap-1.5 ${itemClassName} ${
-            dragIndex === index ? 'opacity-60 ring-2 ring-indigo rounded-lg' : ''
+          className={`flex gap-2 ${itemClassName} ${
+            dragIndex === index ? 'opacity-70 ring-2 ring-indigo rounded-lg' : ''
           }`}
         >
-          {/* 拖动把手。touch-action:none 是必须的，否则手机上一动就变成页面滚动 */}
-          <div className="flex flex-col items-center pt-1 shrink-0">
+          {/* 控件竖条。以前这一列用的是 text-ink/25 —— 16px 的图标淡成一片灰，
+              基本等于看不见，用户根本发现不了能拖。所以给它一个浅底色框，
+              让它一眼就是「可以抓的地方」。 */}
+          <div className="flex flex-col items-center shrink-0 rounded-lg bg-mist/50 border border-mist py-1 px-0.5 self-start">
+            {/* 拖动把手。touch-action:none 是必须的，否则手机上一拖就变成页面滚动 */}
             <button
               type="button"
               aria-label={t('sortable.drag')}
+              title={t('sortable.drag')}
               onPointerDown={(e) => handlePointerDown(index, e)}
               onPointerMove={handlePointerMove}
               onPointerUp={handlePointerUp}
               onPointerCancel={handlePointerUp}
-              className="p-1 text-ink/25 active:text-indigo cursor-grab touch-none"
+              className="p-1 text-ink/50 active:text-indigo cursor-grab touch-none"
               style={{ touchAction: 'none' }}
             >
-              <GripVertical size={16} />
+              <GripVertical size={18} />
             </button>
-            {/* 键盘 / 读屏 / 小屏微调用的备选路径 */}
+            {/* 键盘 / 读屏 / 小屏微调用的备选路径。
+                点击区域按手指尺寸给（py-1.5 + px-1.5），不然手机上很难点中。 */}
             <button
               type="button"
               aria-label={t('sortable.up')}
+              title={t('sortable.up')}
               disabled={index === 0}
               onClick={() => move(index, index - 1)}
-              className="text-ink/25 disabled:opacity-20 px-1"
+              className="text-ink/50 disabled:opacity-25 py-1.5 px-1.5 active:text-indigo"
             >
-              <ChevronUp size={13} />
+              <ChevronUp size={16} />
             </button>
             <button
               type="button"
               aria-label={t('sortable.down')}
+              title={t('sortable.down')}
               disabled={index === items.length - 1}
               onClick={() => move(index, index + 1)}
-              className="text-ink/25 disabled:opacity-20 px-1"
+              className="text-ink/50 disabled:opacity-25 py-1.5 px-1.5 active:text-indigo"
             >
-              <ChevronDown size={13} />
+              <ChevronDown size={16} />
             </button>
           </div>
           <div className="flex-1 min-w-0">{renderItem(item, index)}</div>

@@ -93,6 +93,7 @@ export default {
     likeTitleActual: 'Goût {n} / 5 (moyenne sur {count} repas)',
   },
   recipe: {
+    reorderHint: 'Maintenez la poignée à gauche pour glisser les étapes, ou utilisez les flèches',
     optional: 'facultatif',
     optionalOn: 'Facultatif — touchez pour le rendre obligatoire',
     optionalOff: 'Obligatoire — touchez pour le rendre facultatif',

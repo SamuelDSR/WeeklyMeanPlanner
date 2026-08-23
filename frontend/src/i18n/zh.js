@@ -87,6 +87,7 @@ export default {
     likeTitleActual: '喜好 {n} / 5（吃过 {count} 顿的均分）',
   },
   recipe: {
+    reorderHint: '按住左边的把手可以拖动排序，也可以用上下箭头',
     optional: '可选',
     optionalOn: '这项是可选的，点一下改回必备',
     optionalOff: '必备食材，点一下标成可选',

@@ -93,6 +93,7 @@ export default {
     likeTitleActual: 'Liking {n} / 5 (average over {count} meals)',
   },
   recipe: {
+    reorderHint: 'Hold the handle on the left to drag steps around, or use the arrows',
     optional: 'optional',
     optionalOn: 'Optional — tap to make it required',
     optionalOff: 'Required — tap to mark optional',
