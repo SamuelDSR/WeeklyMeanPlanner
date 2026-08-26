@@ -149,3 +149,13 @@ export async function fetchImportStatus() {
 export async function importRecipeDraft({ text, url }) {
   return api.post('/recipes/import', url ? { url } : { text });
 }
+
+// 「自己去问，把 JSON 贴回来」用的提示词（和服务端调模型时用的是同一份 schema）
+export async function fetchImportPrompt() {
+  return (await api.get('/recipes/import/prompt')).prompt;
+}
+
+// 把粘贴进来的 JSON 清洗成表单草稿。不需要配置 LLM_API_KEY。
+export async function importRecipeFromJson(json) {
+  return api.post('/recipes/import/paste', { json });
+}

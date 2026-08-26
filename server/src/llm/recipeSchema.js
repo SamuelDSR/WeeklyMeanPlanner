@@ -147,3 +147,21 @@ export function normalizeRecipeDraft(raw) {
     steps,
   };
 }
+
+// 给「不配 API key，自己拿去问任何一个聊天窗口」用的提示词。
+//
+// 和上面 SYSTEM_PROMPT 用的是同一套要求和同一份 schema —— 必须同源，
+// 否则用户贴回来的 JSON 和我们期望的形状会慢慢对不上。
+export function buildPastePrompt() {
+  return `${SYSTEM_PROMPT}
+
+把结果**只**输出成一个 JSON 对象，不要加解释、不要加 \`\`\` 以外的任何东西。
+字段如下（enum 里的值必须原样使用，不要翻译、不要自己造）：
+
+${JSON.stringify(RECIPE_JSON_SCHEMA, null, 2)}
+
+下面是菜谱原文：
+---
+（把菜谱粘贴在这里）
+---`;
+}
