@@ -366,6 +366,74 @@ const MIGRATIONS = [
       DELETE FROM notification_log WHERE meal_slot = '早餐';
     `,
   },
+  {
+    name: '013_cards_and_ledgers',
+    sql: `
+      -- ---------- 会员卡 ----------
+      -- 超市积分卡、药店卡这些，实体卡就是一串码。存下来，结账时调出来给扫码枪看。
+      CREATE TABLE IF NOT EXISTS loyalty_cards (
+        id          SERIAL PRIMARY KEY,
+        family_id   INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,                    -- 卡的名字，比如 Carrefour
+        code        TEXT NOT NULL,                    -- 卡号 / 码的内容
+        code_format TEXT NOT NULL DEFAULT 'CODE128',  -- CODE128 / EAN13 / QR ...
+        note        TEXT NOT NULL DEFAULT '',
+        color       TEXT NOT NULL DEFAULT 'indigo',   -- 列表里好认
+        -- 码印得太糊扫不出来时，还能给收银员看实拍照片
+        photo_url   TEXT,
+        thumb_url   TEXT,
+        sort_order  INTEGER NOT NULL DEFAULT 0,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_loyalty_cards_family ON loyalty_cards(family_id);
+
+      -- ---------- 记账 ----------
+      -- 子账本：度假、装修这类有起止的开销集合。
+      -- **没有"主账本"这张表** —— 主账本就是这个家庭本身：
+      -- expenses.ledger_id 为空就是日常开销，总账 = 全部 expenses。
+      -- 这样「度假花了多少」和「这个月一共花了多少（含度假）」两个问题都能答。
+      CREATE TABLE IF NOT EXISTS ledgers (
+        id          SERIAL PRIMARY KEY,
+        family_id   INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        name        TEXT NOT NULL,
+        note        TEXT NOT NULL DEFAULT '',
+        starts_on   DATE,
+        ends_on     DATE,
+        -- 出国度假可能用别的货币；不填就跟家庭默认
+        currency    TEXT,
+        archived_at TIMESTAMPTZ,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT ledgers_dates_check CHECK (ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on)
+      );
+      CREATE INDEX IF NOT EXISTS idx_ledgers_family ON ledgers(family_id);
+
+      CREATE TABLE IF NOT EXISTS expenses (
+        id          SERIAL PRIMARY KEY,
+        family_id   INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+        -- 子账本删掉时开销不跟着消失，只是回到「日常」
+        ledger_id   INTEGER REFERENCES ledgers(id) ON DELETE SET NULL,
+        spent_on    DATE NOT NULL,
+        amount      NUMERIC(12,2) NOT NULL,
+        currency    TEXT NOT NULL DEFAULT 'EUR',
+        category    TEXT NOT NULL DEFAULT '其他',
+        note        TEXT NOT NULL DEFAULT '',
+        -- 谁付的钱。人被删掉了记录还要留着，所以 SET NULL + 名字快照
+        paid_by     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        paid_by_name TEXT,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+        CONSTRAINT expenses_amount_check CHECK (amount <> 0)
+      );
+      CREATE INDEX IF NOT EXISTS idx_expenses_family_date ON expenses(family_id, spent_on DESC);
+      CREATE INDEX IF NOT EXISTS idx_expenses_ledger ON expenses(ledger_id);
+
+      -- 家庭默认货币（在法国就是欧元）
+      ALTER TABLE families ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'EUR';
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

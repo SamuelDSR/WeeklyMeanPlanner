@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { subscribeShoppingList, toggleShoppingItem } from '../lib/familyData';
 import { queueOfflineToggle, flushOfflineQueue } from '../lib/offlineQueue';
 import { useI18n } from '../i18n';
+import EatTabs from '../components/EatTabs';
 import WeekTabs from '../components/WeekTabs';
 import { domainLabel } from '../i18n/domain';
 
@@ -68,6 +69,7 @@ export default function ShoppingList() {
   if (list === undefined) {
     return (
       <div className="max-w-3xl mx-auto px-4 pt-4 pb-nav">
+      <EatTabs />
         {header}
         <p className="text-center text-ink/40 text-sm mt-6">{t('common.loading')}</p>
       </div>
@@ -77,6 +79,7 @@ export default function ShoppingList() {
   if (items.length === 0) {
     return (
       <div className="max-w-3xl mx-auto px-4 pt-4 pb-nav">
+      <EatTabs />
         {header}
         <p className="text-center text-ink/40 text-sm mt-6">{t('shopping.empty')}</p>
       </div>
@@ -85,6 +88,7 @@ export default function ShoppingList() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-nav">
+      <EatTabs />
       {header}
       <p className="text-xs text-ink/40 font-mono mb-4">
         {t('shopping.progress', { done: boughtCount, total: items.length })}

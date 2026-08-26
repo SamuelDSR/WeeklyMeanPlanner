@@ -15,6 +15,7 @@ CREATE TABLE families (
   -- 默认主食（外键在 staples 建好之后再加）和「哪几顿配主食」
   default_staple_id   INTEGER,
   staple_meals        TEXT[] NOT NULL DEFAULT '{午餐,晚餐}',
+  currency            TEXT NOT NULL DEFAULT 'EUR',   -- 记账用的默认货币
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT families_member_count_check CHECK (member_count >= 1),
   CONSTRAINT families_notify_lead_check CHECK (notify_lead_minutes BETWEEN 0 AND 1440)
@@ -47,7 +48,8 @@ INSERT INTO schema_migrations (name) VALUES
   ('003_servings_multi_dish_step_photos'), ('004_family_owner'), ('005_store_bought'),
   ('006_eat_out_history_ratings'), ('007_meal_likes_history_survives'),
   ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications'),
-  ('011_optional_ingredients_staples');
+  ('011_optional_ingredients_staples'), ('012_drop_breakfast_slot'),
+  ('013_cards_and_ledgers');
 
 -- families.owner_id -> users.id：两张表互相引用，所以等 users 建完再补这个外键
 ALTER TABLE families
@@ -231,3 +233,60 @@ CREATE TABLE app_settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
+
+-- ---------- 会员卡 ----------
+-- 超市积分卡这些，实体卡就是一串码。存下来，结账时调出来给扫码枪看。
+CREATE TABLE loyalty_cards (
+  id          SERIAL PRIMARY KEY,
+  family_id   INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  code        TEXT NOT NULL,
+  code_format TEXT NOT NULL DEFAULT 'CODE128',
+  note        TEXT NOT NULL DEFAULT '',
+  color       TEXT NOT NULL DEFAULT 'indigo',
+  photo_url   TEXT,                                  -- 码扫不出来时给收银员看实拍
+  thumb_url   TEXT,
+  sort_order  INTEGER NOT NULL DEFAULT 0,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX idx_loyalty_cards_family ON loyalty_cards(family_id);
+
+-- ---------- 记账 ----------
+-- 子账本：度假、装修这类有起止的开销集合。
+-- 没有"主账本"这张表 —— 主账本就是这个家庭本身：
+-- expenses.ledger_id 为空就是日常开销，总账 = 全部 expenses。
+CREATE TABLE ledgers (
+  id          SERIAL PRIMARY KEY,
+  family_id   INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  note        TEXT NOT NULL DEFAULT '',
+  starts_on   DATE,
+  ends_on     DATE,
+  currency    TEXT,                                  -- 不填就跟家庭默认
+  archived_at TIMESTAMPTZ,
+  created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT ledgers_dates_check CHECK (ends_on IS NULL OR starts_on IS NULL OR ends_on >= starts_on)
+);
+CREATE INDEX idx_ledgers_family ON ledgers(family_id);
+
+CREATE TABLE expenses (
+  id           SERIAL PRIMARY KEY,
+  family_id    INTEGER NOT NULL REFERENCES families(id) ON DELETE CASCADE,
+  -- 子账本删掉时开销不跟着消失，只是回到「日常」
+  ledger_id    INTEGER REFERENCES ledgers(id) ON DELETE SET NULL,
+  spent_on     DATE NOT NULL,
+  amount       NUMERIC(12,2) NOT NULL,
+  currency     TEXT NOT NULL DEFAULT 'EUR',
+  category     TEXT NOT NULL DEFAULT '其他',
+  note         TEXT NOT NULL DEFAULT '',
+  paid_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  paid_by_name TEXT,                                 -- 名字快照，人删了记录还认得
+  created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT expenses_amount_check CHECK (amount <> 0)
+);
+CREATE INDEX idx_expenses_family_date ON expenses(family_id, spent_on DESC);
+CREATE INDEX idx_expenses_ledger ON expenses(ledger_id);

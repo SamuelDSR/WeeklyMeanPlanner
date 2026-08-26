@@ -15,6 +15,7 @@ import {
 } from '../lib/familyData';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
+import EatTabs from '../components/EatTabs';
 import MenuDayCard from '../components/MenuDayCard';
 import MealPlanSummary from '../components/MealPlanSummary';
 import WeekTabs from '../components/WeekTabs';
@@ -166,6 +167,7 @@ export default function WeeklyMenu() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-nav">
+      <EatTabs />
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-display font-bold text-xl">{t('menu.title')}</h2>
         <Link to="/history" className="text-sm text-indigo flex items-center gap-1">

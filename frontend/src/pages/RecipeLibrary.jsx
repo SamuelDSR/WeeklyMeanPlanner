@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Clock, ImageOff, ShoppingBag } from 'lucide-react';
 import ScoreBadges from '../components/ScoreBadges';
 import { useI18n } from '../i18n';
+import EatTabs from '../components/EatTabs';
 import { domainLabel } from '../i18n/domain';
 import { useAuth } from '../context/AuthContext';
 import { subscribeRecipes } from '../lib/familyData';
@@ -31,6 +32,7 @@ export default function RecipeLibrary() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 pt-4 pb-nav">
+      <EatTabs />
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display font-bold text-xl">{t('recipes.title')}</h2>
         <Link

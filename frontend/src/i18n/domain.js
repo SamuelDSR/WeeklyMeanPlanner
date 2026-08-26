@@ -84,7 +84,22 @@ const UNIT_GROUPS = {
   不计量: { en: 'Unmeasured', fr: 'Non mesuré' },
 };
 
+// 开销分类（expenses.category），和其它领域值一样：库里存中文，显示时翻译
+const EXPENSE_CATEGORIES = {
+  餐饮: { en: 'Eating out', fr: 'Restaurant' },
+  食材: { en: 'Groceries', fr: 'Courses' },
+  交通: { en: 'Transport', fr: 'Transport' },
+  住宿: { en: 'Lodging', fr: 'Hébergement' },
+  购物: { en: 'Shopping', fr: 'Achats' },
+  娱乐: { en: 'Leisure', fr: 'Loisirs' },
+  医疗: { en: 'Health', fr: 'Santé' },
+  居家: { en: 'Home', fr: 'Maison' },
+  通讯: { en: 'Phone & net', fr: 'Télécom' },
+  其他: { en: 'Other', fr: 'Autre' },
+};
+
 const TABLES = {
+  expenseCategory: EXPENSE_CATEGORIES,
   staple: STAPLES,
   meal: MEALS,
   recipeCategory: RECIPE_CATEGORIES,
@@ -93,7 +108,7 @@ const TABLES = {
   unitGroup: UNIT_GROUPS,
 };
 
-// kind: staple | meal | recipeCategory | ingredientCategory | unit | unitGroup
+// kind: staple | meal | recipeCategory | ingredientCategory | expenseCategory | unit | unitGroup
 export function domainLabel(locale, kind, value) {
   if (!value) return value ?? '';
   if (locale === 'zh') return value;

@@ -18,6 +18,9 @@ import historyRoutes from './routes/history.js';
 import pushRoutes from './routes/push.js';
 import stapleRoutes from './routes/staples.js';
 import recipeImportRoutes from './routes/recipeImport.js';
+import cardRoutes from './routes/cards.js';
+import ledgerRoutes from './routes/ledgers.js';
+import expenseRoutes from './routes/expenses.js';
 
 import { runMigrations } from './migrate.js';
 import { bootstrapAdmin } from './adminBootstrap.js';
@@ -61,6 +64,9 @@ app.use('/api/family', familyRoutes);
 app.use('/api/history', historyRoutes);
 app.use('/api/push', pushRoutes);
 app.use('/api/staples', stapleRoutes);
+app.use('/api/cards', cardRoutes);
+app.use('/api/ledgers', ledgerRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
 

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { I18nProvider } from './i18n';
@@ -11,6 +12,15 @@ import RecipeDetail from './pages/RecipeDetail';
 import ShoppingList from './pages/ShoppingList';
 import Settings from './pages/Settings';
 import MealHistory from './pages/MealHistory';
+// 卡包要用 jsbarcode + qrcode（合起来 100 多 KB），记账页也不小。
+// 按需加载：只在真的点进这两个 tab 时才下载，别拖慢每次冷启动。
+const CardWallet = lazy(() => import('./pages/CardWallet'));
+const Ledger = lazy(() => import('./pages/Ledger'));
+
+// 按需加载时的占位。不写文字，避免闪一下再被真内容替换掉
+function PageLoading() {
+  return <div className="max-w-3xl mx-auto px-4 pt-10 text-center text-ink/30 text-sm">···</div>;
+}
 
 export default function App() {
   return (
@@ -28,6 +38,9 @@ export default function App() {
             <Route path="/recipes/:id/edit" element={<RecipeForm />} />
             <Route path="/shopping" element={<ShoppingList />} />
             <Route path="/history" element={<MealHistory />} />
+            {/* 记账和卡包：和「吃饭」并列的两个 tab（按需加载） */}
+            <Route path="/ledger" element={<Suspense fallback={<PageLoading />}><Ledger /></Suspense>} />
+            <Route path="/cards" element={<Suspense fallback={<PageLoading />}><CardWallet /></Suspense>} />
           </Route>
           {/* 设置：账号设置 + 家庭管理 + 用户审核 三段都在这一页。
               不要求已加入家庭，所以用只判断登录的守卫。 */}
