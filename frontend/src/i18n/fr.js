@@ -311,5 +311,12 @@ export default {
     queuedExpense: 'Hors ligne — enregistré sur ce téléphone, envoi automatique dès la reconnexion.',
     needOnlineEdit: 'La modification nécessite une connexion (hors ligne, vous pouvez ajouter mais pas modifier).',
   },
+  brands: {
+    title: 'Choisir une enseigne', search: 'Rechercher…',
+    hint: 'Touchez une enseigne et la caméra s\'ouvre directement — ni nom ni type de code à saisir.',
+    custom: 'Absente de la liste ? Ajouter à la main',
+    noMatch: 'Aucun résultat — vous pouvez l\'ajouter à la main',
+    group: { grocery: 'Supermarchés & alimentation', food: 'Restauration', home: 'Maison, magasins & sport', other: 'Autres' },
+  },
   timer: { start: 'Démarrer', pause: 'Pause', reset: 'Réinitialiser', done: 'C’est prêt !' },
 };

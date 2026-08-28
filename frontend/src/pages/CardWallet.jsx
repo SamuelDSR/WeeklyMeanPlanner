@@ -7,6 +7,8 @@ import { uploadRecipePhoto } from '../lib/familyData';
 import { readCache, writeCache, cacheMeta, isNetworkError } from '../lib/localCache';
 import BarcodeView from '../components/BarcodeView';
 import CardScanView from '../components/CardScanView';
+import BrandPicker from '../components/BrandPicker';
+import BrandLogo from '../components/BrandLogo';
 // 扫码要拉 1 MB 的 wasm（只在没有原生 BarcodeDetector 的浏览器上），按需加载
 const CardScanner = lazy(() => import('../components/CardScanner'));
 import { useI18n } from '../i18n';
@@ -30,9 +32,17 @@ function formatSavedAt(meta, locale) {
 }
 
 const emptyDraft = () => ({
-  name: '', code: '', codeFormat: 'CODE128', note: '', color: 'indigo',
+  name: '', code: '', codeFormat: 'CODE128', note: '', color: 'indigo', brand: null,
   photoURL: null, thumbURL: null,
 });
+
+// 和 BrandLogo 里的判断保持一致：浅色底配黑字
+function isLightHex(hex) {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
+  if (!m) return false;
+  const n = parseInt(m[1], 16);
+  return (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.6;
+}
 
 export default function CardWallet() {
   const { t, locale } = useI18n();
@@ -45,6 +55,10 @@ export default function CardWallet() {
   const [uploading, setUploading] = useState(false);
   const [stale, setStale] = useState(false); // 正在用本地缓存撑着
   const [scanning2, setScanning2] = useState(false); // 相机扫码面板
+  const [picking, setPicking] = useState(false);     // 选商家
+  // 「点商家 -> 直接扫 -> 存好」这条快捷路径上，当前选的是哪个商家
+  const [quickBrand, setQuickBrand] = useState(null);
+  const [savingQuick, setSavingQuick] = useState(false);
 
   // 会员卡是「站在收银台前必须立刻打开」的东西，所以不等网络：
   // 先把上次存的那份画出来，再去后台刷新。NetworkFirst 断网要等 3 秒超时，
@@ -79,6 +93,11 @@ export default function CardWallet() {
       cancelled = true;
     };
   }, []);
+
+  // 卡上记着商家 slug，名字/颜色都从 meta 里查（改配色不用动数据库）
+  function brandOf(card) {
+    return card.brand ? (meta.brands || []).find((b) => b.slug === card.brand) || null : null;
+  }
 
   async function reload() {
     const list = await fetchCards();
@@ -141,7 +160,7 @@ export default function CardWallet() {
           <CreditCard size={19} className="text-indigo" /> {t('cards.title')}
         </h2>
         <button
-          onClick={() => setEditing(emptyDraft())}
+          onClick={() => setPicking(true)}
           className="text-sm text-indigo flex items-center gap-1 px-2 py-1.5 -mr-2"
         >
           <Plus size={16} /> {t('cards.add')}
@@ -171,11 +190,27 @@ export default function CardWallet() {
                 onClick={() => setScanning(card)}
                 className="w-full text-left"
               >
-                <div className={`${COLOR_CLASS[card.color] || 'bg-indigo'} h-16 flex items-end p-2.5`}>
-                  <span className="text-white font-display font-bold text-sm truncate drop-shadow">
-                    {card.name}
-                  </span>
-                </div>
+                {/* 认识的商家用品牌色，自己加的卡用调色板颜色 */}
+                {brandOf(card) ? (
+                  <div
+                    className="h-16 flex items-center gap-2 px-2.5"
+                    style={{ background: brandOf(card).color }}
+                  >
+                    <BrandLogo brand={brandOf(card)} size={30} className="bg-white/25" />
+                    <span
+                      className="font-display font-bold text-sm truncate drop-shadow"
+                      style={{ color: isLightHex(brandOf(card).color) ? '#22302B' : '#fff' }}
+                    >
+                      {card.name}
+                    </span>
+                  </div>
+                ) : (
+                  <div className={`${COLOR_CLASS[card.color] || 'bg-indigo'} h-16 flex items-end p-2.5`}>
+                    <span className="text-white font-display font-bold text-sm truncate drop-shadow">
+                      {card.name}
+                    </span>
+                  </div>
+                )}
                 <div className="px-2.5 py-2 bg-white">
                   {/* 卡面上放一个小号的码，认起来快 */}
                   <div className="h-10 overflow-hidden flex items-center justify-center">
@@ -210,15 +245,68 @@ export default function CardWallet() {
         </div>
       )}
 
-      {/* 相机扫码。扫到就把码和格式一起填回表单 —— 格式也是扫出来的，
-          用户不用再去猜这张卡是 EAN-13 还是 Code 128。 */}
+      {/* 第一步：选商家。点一下就直接开相机。 */}
+      {picking && (
+        <BrandPicker
+          brands={meta.brands || []}
+          onClose={() => setPicking(false)}
+          onPick={(brand) => {
+            setQuickBrand(brand);
+            setPicking(false);
+            setScanning2(true);
+          }}
+          onCustom={() => {
+            setPicking(false);
+            setQuickBrand(null);
+            setEditing(emptyDraft());
+          }}
+        />
+      )}
+
+      {/* 相机扫码。
+          从商家进来的：扫到就**直接存**，一步都不用再点 —— 名字、颜色、
+          码制全都是现成的，再弹个表单让人按「保存」纯属多此一举。
+          从编辑表单进来的：只把码填回表单，用户还要接着改别的。 */}
       {scanning2 && (
         <Suspense fallback={null}>
           <CardScanner
-            onClose={() => setScanning2(false)}
-            onDetected={({ code, format }) => {
-              setEditing((d) => ({ ...(d || emptyDraft()), code, codeFormat: format }));
+            onClose={() => {
               setScanning2(false);
+              // 从商家进来的没扫成，退到预填好的表单，别让人白点一趟
+              if (quickBrand) {
+                setEditing({ ...emptyDraft(), name: quickBrand.name, brand: quickBrand.slug,
+                             codeFormat: quickBrand.format });
+                setQuickBrand(null);
+              }
+            }}
+            onDetected={async ({ code, format }) => {
+              if (!quickBrand) {
+                setEditing((d) => ({ ...(d || emptyDraft()), code, codeFormat: format }));
+                setScanning2(false);
+                return;
+              }
+              setSavingQuick(true);
+              try {
+                await createCard({
+                  name: quickBrand.name,
+                  brand: quickBrand.slug,
+                  code,
+                  codeFormat: format,
+                  color: 'indigo',
+                });
+                await reload();
+                setScanning2(false);
+                setQuickBrand(null);
+              } catch (e) {
+                // 存不下（码校验不过、离线）就退到表单，扫到的东西不能白丢
+                setScanning2(false);
+                setEditing({ ...emptyDraft(), name: quickBrand.name, brand: quickBrand.slug,
+                             code, codeFormat: format });
+                setQuickBrand(null);
+                setError(e.message || t('common.saveFailed'));
+              } finally {
+                setSavingQuick(false);
+              }
             }}
           />
         </Suspense>

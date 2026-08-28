@@ -478,6 +478,16 @@ const MIGRATIONS = [
       END $$;
     `,
   },
+  {
+    name: '016_card_brand',
+    sql: `
+      -- 卡属于哪个商家（carrefour / picard …）。只存一个 slug，
+      -- 名字、品牌色、首字母都在代码里（server/src/cardBrands.js）——
+      -- 这样以后想换配色或者补商家，不用动数据库。
+      -- 自己加的卡这一列为空，照旧用 color 里的调色板颜色。
+      ALTER TABLE loyalty_cards ADD COLUMN IF NOT EXISTS brand TEXT;
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

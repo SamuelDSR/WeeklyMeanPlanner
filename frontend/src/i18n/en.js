@@ -311,5 +311,12 @@ export default {
     queuedExpense: 'Offline — saved on this phone and will upload automatically once you reconnect.',
     needOnlineEdit: 'Editing needs a connection (offline you can add new entries, but not change existing ones).',
   },
+  brands: {
+    title: 'Pick a shop', search: 'Search shops…',
+    hint: 'Tap a shop and the camera opens straight away — no name or code type to fill in.',
+    custom: 'Not listed? Add manually',
+    noMatch: 'No match — you can add it manually',
+    group: { grocery: 'Supermarkets & food', food: 'Restaurants', home: 'Home, retail & sport', other: 'Other' },
+  },
   timer: { start: 'Start', pause: 'Pause', reset: 'Reset', done: 'Time’s up!' },
 };

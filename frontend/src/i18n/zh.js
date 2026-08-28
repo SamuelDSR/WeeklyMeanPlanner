@@ -300,5 +300,12 @@ export default {
     queuedExpense: '离线中，这一笔先存在手机里，联网后会自动上传。',
     needOnlineEdit: '改动需要联网才能保存（离线只能新记，不能改已有的）。',
   },
+  brands: {
+    title: '选商家', search: '搜商家…',
+    hint: '点一下商家就直接开相机扫卡，名字和码制都不用填。',
+    custom: '列表里没有？手动添加',
+    noMatch: '没找到这个商家，可以手动添加',
+    group: { grocery: '超市 · 食品', food: '餐饮', home: '家居 · 百货 · 运动', other: '其它' },
+  },
   timer: { start: '开始', pause: '暂停', reset: '重置', done: '时间到！' },
 };

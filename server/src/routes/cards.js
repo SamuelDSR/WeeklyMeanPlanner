@@ -4,6 +4,7 @@ import { query } from '../db.js';
 import { requireAuth, requireFamily } from '../auth.js';
 import { parseId, sanitizePhotoURL } from '../validate.js';
 import { CARD_FORMATS, validateCode } from '../cardFormats.js';
+import { CARD_BRANDS, isValidBrand } from '../cardBrands.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
@@ -21,15 +22,16 @@ function toCardJson(row) {
     codeFormat: row.code_format,
     note: row.note,
     color: row.color,
+    brand: row.brand,
     photoURL: row.photo_url,
     thumbURL: row.thumb_url,
     sortOrder: row.sort_order,
   };
 }
 
-// 可选的码格式列表，给前端下拉框用
+// 码格式、配色、以及常见商家预设。前端会把这份缓存到本地，离线也能用。
 router.get('/formats', (req, res) => {
-  res.json({ formats: CARD_FORMATS, colors: COLORS });
+  res.json({ formats: CARD_FORMATS, colors: COLORS, brands: CARD_BRANDS });
 });
 
 router.get('/', async (req, res) => {
@@ -73,6 +75,13 @@ function validateCard(body, existing = null) {
     out.color = body.color;
   }
 
+  // 预设商家：只接受列表里认识的 slug，null 表示自己加的卡
+  if (body?.brand !== undefined) {
+    if (body.brand === null || body.brand === '') out.brand = null;
+    else if (!isValidBrand(body.brand)) return { error: '不认识这个商家' };
+    else out.brand = body.brand;
+  }
+
   if (body?.photoURL !== undefined) out.photo_url = sanitizePhotoURL(body.photoURL);
   if (body?.thumbURL !== undefined) out.thumb_url = sanitizePhotoURL(body.thumbURL);
 
@@ -88,9 +97,9 @@ router.post('/', async (req, res) => {
     [req.user.familyId]
   );
   const result = await query(
-    `INSERT INTO loyalty_cards (family_id, name, code, code_format, note, color,
+    `INSERT INTO loyalty_cards (family_id, name, code, code_format, note, color, brand,
                                 photo_url, thumb_url, sort_order, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [
       req.user.familyId,
       value.name,
@@ -98,6 +107,7 @@ router.post('/', async (req, res) => {
       value.code_format,
       value.note ?? '',
       value.color ?? 'indigo',
+      value.brand ?? null,
       value.photo_url ?? null,
       value.thumb_url ?? null,
       next.rows[0].n,

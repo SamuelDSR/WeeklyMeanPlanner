@@ -49,7 +49,7 @@ INSERT INTO schema_migrations (name) VALUES
   ('006_eat_out_history_ratings'), ('007_meal_likes_history_survives'),
   ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications'),
   ('011_optional_ingredients_staples'), ('012_drop_breakfast_slot'),
-  ('013_cards_and_ledgers'), ('014_income_and_categories'), ('015_offline_sync');
+  ('013_cards_and_ledgers'), ('014_income_and_categories'), ('015_offline_sync'), ('016_card_brand');
 
 -- families.owner_id -> users.id：两张表互相引用，所以等 users 建完再补这个外键
 ALTER TABLE families
@@ -244,6 +244,7 @@ CREATE TABLE loyalty_cards (
   code_format TEXT NOT NULL DEFAULT 'CODE128',
   note        TEXT NOT NULL DEFAULT '',
   color       TEXT NOT NULL DEFAULT 'indigo',
+  brand       TEXT,                                  -- 预设商家的 slug，自己加的卡为空
   photo_url   TEXT,                                  -- 码扫不出来时给收银员看实拍
   thumb_url   TEXT,
   sort_order  INTEGER NOT NULL DEFAULT 0,
