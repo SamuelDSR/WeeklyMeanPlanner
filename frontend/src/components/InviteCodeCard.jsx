@@ -33,7 +33,7 @@ export default function InviteCodeCard({ code, canManage, onRegenerate }) {
 
   return (
     <div className="bg-white rounded-xl shadow-card p-3.5">
-      <h3 className="text-sm font-medium text-ink/60 mb-2">{t('family.inviteTitle')}</h3>
+      <h4 className="text-sm font-medium text-ink/60 mb-2">{t('family.inviteTitle')}</h4>
 
       <div className="flex items-center gap-2">
         <code className="flex-1 font-mono text-2xl tracking-[0.2em] text-indigo bg-porcelain rounded-lg px-3 py-2 text-center select-all">

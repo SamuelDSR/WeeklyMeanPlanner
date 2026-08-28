@@ -1,6 +1,7 @@
 // 中文是"原文"：其它语言以这份为准。缺翻译时会自动回退到这里。
 export default {
   common: {
+    saved: '已保存',
     close: '关闭',
     edit: '编辑',
     save: '保存', cancel: '取消', delete: '删除', remove: '移除', edit: '修改',
@@ -148,6 +149,9 @@ export default {
     weekPosition: '第 {n} / {total} 周', latestWeek: '最近一周',
   },
   settings: {
+    sectionAccount: '账号',
+    sectionFamily: '家庭',
+    sectionAdmin: '应用管理',
     title: '设置',
     accountTitle: '账号设置', displayName: '称呼', email: '登录邮箱',
     language: '界面语言', logout: '退出登录',
@@ -248,6 +252,19 @@ export default {
     byCategory: '按分类', entries: '明细', noEntries: '这个范围里还没有记录',
     entryCount: '{count} 笔',
     deleteExpenseConfirm: '删掉这一笔？',
+  },
+  ledgerSettings: {
+    currencyTitle: '默认货币',
+    currencyHint: '记一笔的时候默认填它。每笔开销自己存着货币，改这里不会动到已经记下的账。',
+    noConversion: '不同货币从不换算，合计时各算各的 —— 汇率天天变，编一个只会让账变成假的。',
+  },
+  cardSettings: {
+    landscapeTitle: '打开卡片时',
+    landscapeLabel: '一维码自动横过来',
+    landscapeHint: '横过来能长一倍多，扫码枪更容易读到。二维码是方的，不受影响。这个只对这台设备生效。',
+    orderTitle: '卡片顺序',
+    orderHint: '常去的排前面，结账时少划几下。顺序是全家共享的。',
+    noCards: '还没有卡',
   },
   timer: { start: '开始', pause: '暂停', reset: '重置', done: '时间到！' },
 };

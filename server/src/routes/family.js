@@ -8,6 +8,7 @@ import { requireAuth, requireFamily } from '../auth.js';
 import { parseId } from '../validate.js';
 import { makeUniqueInviteCode } from '../inviteCode.js';
 import { MEAL_SLOTS } from '../recommend.js';
+import { isSupportedCurrency, SUPPORTED_CURRENCIES } from '../money.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
@@ -50,6 +51,7 @@ function toFamilyJson(family, { isOwner, canManage }) {
     mealTimes: family.meal_times,
     notifyEnabled: family.notify_enabled,
     notifyLeadMinutes: family.notify_lead_minutes,
+    currency: family.currency,
     isOwner,
     canManage,
   };
@@ -58,7 +60,7 @@ function toFamilyJson(family, { isOwner, canManage }) {
 async function loadContext(req) {
   const result = await query(
     `SELECT id, name, invite_code, member_count, owner_id, timezone, meal_times,
-            notify_enabled, notify_lead_minutes FROM families WHERE id=$1`,
+            notify_enabled, notify_lead_minutes, currency FROM families WHERE id=$1`,
     [req.user.familyId]
   );
   const family = result.rows[0];
@@ -149,6 +151,16 @@ router.patch('/', async (req, res) => {
     updates.push(`meal_times=$${values.length}::jsonb`);
   }
 
+  // 记账用的默认货币。改它不影响已经记下的开销 —— 每笔开销自己存了货币，
+  // 换默认值不该把历史账目一起改掉。
+  if (req.body?.currency !== undefined) {
+    if (!isSupportedCurrency(req.body.currency)) {
+      return res.status(400).json({ error: `不支持这个货币（可选：${SUPPORTED_CURRENCIES.join(' ')}）` });
+    }
+    values.push(req.body.currency);
+    updates.push(`currency=$${values.length}`);
+  }
+
   if (req.body?.timezone !== undefined) {
     const tz = String(req.body.timezone || '').trim();
     if (!isValidTimeZone(tz)) return res.status(400).json({ error: '时区名不认识' });
@@ -162,7 +174,7 @@ router.patch('/', async (req, res) => {
   const result = await query(
     `UPDATE families SET ${updates.join(', ')} WHERE id=$${values.length}
      RETURNING id, name, invite_code, member_count, owner_id, timezone, meal_times,
-               notify_enabled, notify_lead_minutes`,
+               notify_enabled, notify_lead_minutes, currency`,
     values
   );
   res.json({ family: toFamilyJson(result.rows[0], ctx) });
@@ -178,7 +190,7 @@ router.post('/invite-code', async (req, res) => {
   const result = await query(
     `UPDATE families SET invite_code=$1 WHERE id=$2
      RETURNING id, name, invite_code, member_count, owner_id, timezone, meal_times,
-               notify_enabled, notify_lead_minutes`,
+               notify_enabled, notify_lead_minutes, currency`,
     [code, ctx.family.id]
   );
   res.json({ family: toFamilyJson(result.rows[0], ctx) });
@@ -225,7 +237,7 @@ router.post('/transfer/:id', async (req, res) => {
   const result = await query(
     `UPDATE families SET owner_id=$1 WHERE id=$2
      RETURNING id, name, invite_code, member_count, owner_id, timezone, meal_times,
-               notify_enabled, notify_lead_minutes`,
+               notify_enabled, notify_lead_minutes, currency`,
     [targetId, ctx.family.id]
   );
   const updated = result.rows[0];

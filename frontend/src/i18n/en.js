@@ -1,6 +1,7 @@
 // English. 结构必须和 zh.js 一致；需要单复数的用 { one, other }（见 i18n/index.jsx）。
 export default {
   common: {
+    saved: 'Saved',
     close: 'Close',
     edit: 'Edit',
     save: 'Save', cancel: 'Cancel', delete: 'Delete', remove: 'Remove', edit: 'Edit',
@@ -159,6 +160,9 @@ export default {
     weekPosition: 'Week {n} of {total}', latestWeek: 'Latest week',
   },
   settings: {
+    sectionAccount: 'Account',
+    sectionFamily: 'Family',
+    sectionAdmin: 'App admin',
     title: 'Settings',
     accountTitle: 'Account', displayName: 'Name', email: 'Sign-in email',
     language: 'Language', logout: 'Sign out',
@@ -259,6 +263,19 @@ export default {
     byCategory: 'By category', entries: 'Entries', noEntries: 'Nothing recorded in this range yet',
     entryCount: '{count} entries',
     deleteExpenseConfirm: 'Delete this entry?',
+  },
+  ledgerSettings: {
+    currencyTitle: 'Default currency',
+    currencyHint: 'Pre-filled when you add an entry. Each expense stores its own currency, so changing this leaves recorded entries alone.',
+    noConversion: 'Currencies are never converted — totals stay separate. Rates move daily, and inventing one would just make the books fiction.',
+  },
+  cardSettings: {
+    landscapeTitle: 'When opening a card',
+    landscapeLabel: 'Rotate 1D barcodes automatically',
+    landscapeHint: 'Sideways it is more than twice as long, so scanners read it more easily. QR codes are square and unaffected. This applies to this device only.',
+    orderTitle: 'Card order',
+    orderHint: 'Put the shops you visit most at the front — fewer swipes at the till. The order is shared with the family.',
+    noCards: 'No cards yet',
   },
   timer: { start: 'Start', pause: 'Pause', reset: 'Reset', done: 'Time’s up!' },
 };

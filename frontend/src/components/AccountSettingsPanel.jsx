@@ -29,9 +29,9 @@ export default function AccountSettingsPanel() {
 
   return (
     <section className="bg-white rounded-xl shadow-card p-3.5">
-      <h3 className="font-display font-semibold text-sm flex items-center gap-1.5 mb-3">
+      <h4 className="font-display font-semibold text-sm flex items-center gap-1.5 mb-3">
         <UserCog size={15} className="text-indigo" /> {t('settings.accountTitle')}
-      </h3>
+      </h4>
 
       {error && <p className="text-persimmon text-xs mb-2">{error}</p>}
 

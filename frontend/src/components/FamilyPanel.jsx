@@ -85,9 +85,9 @@ export default function FamilyPanel() {
 
   return (
     <div className="space-y-3">
-      <h3 className="font-display font-semibold text-sm flex items-center gap-1.5 px-1">
+      <h4 className="font-display font-semibold text-sm flex items-center gap-1.5 px-1">
         <Home size={15} className="text-indigo" /> {t('family.title')}
-      </h3>
+      </h4>
 
       {error && (
         <p className="text-persimmon text-sm bg-persimmon/10 rounded-lg px-3 py-2">{error}</p>
@@ -95,7 +95,7 @@ export default function FamilyPanel() {
 
       {/* 家庭名称 */}
       <div className="bg-white rounded-xl shadow-card p-3.5">
-        <h3 className="text-sm font-medium text-ink/60 mb-2">{t('family.nameTitle')}</h3>
+        <h4 className="text-sm font-medium text-ink/60 mb-2">{t('family.nameTitle')}</h4>
         {editingName ? (
           <div className="flex items-center gap-2">
             <input
@@ -153,9 +153,9 @@ export default function FamilyPanel() {
 
       {/* 家里几口人 */}
       <div className="bg-white rounded-xl shadow-card p-3.5">
-        <h3 className="text-sm font-medium text-ink/60 mb-2 flex items-center gap-1.5">
+        <h4 className="text-sm font-medium text-ink/60 mb-2 flex items-center gap-1.5">
           <Users size={15} /> {t('family.membersTitle')}
-        </h3>
+        </h4>
         <div className="flex items-center gap-2">
           <input
             type="number"
@@ -180,9 +180,9 @@ export default function FamilyPanel() {
 
       {/* 成员 */}
       <div className="bg-white rounded-xl shadow-card p-3.5">
-        <h3 className="text-sm font-medium text-ink/60 mb-1">
+        <h4 className="text-sm font-medium text-ink/60 mb-1">
           {t('family.memberListTitle', { count: members.length })}
-        </h3>
+        </h4>
         <ul className="divide-y divide-mist">
           {members.map((m) => (
             <FamilyMemberRow

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, RotateCw, Sun } from 'lucide-react';
 import BarcodeView from './BarcodeView';
 import { useI18n } from '../i18n';
+import { cardLandscape } from '../lib/devicePrefs';
 
 // 给扫码枪看的全屏视图。
 //
@@ -12,7 +13,10 @@ import { useI18n } from '../i18n';
 //   - 手动横屏按钮：手机大多锁了竖屏，不能指望它自己转
 export default function CardScanView({ card, onClose }) {
   const { t } = useI18n();
-  const [landscape, setLandscape] = useState(card.codeFormat !== 'QR');
+  // 二维码是方的，横过来没有意义；一维码看这台设备的偏好（设置里能改）
+  const [landscape, setLandscape] = useState(
+    () => card.codeFormat !== 'QR' && cardLandscape.get()
+  );
   const [wakeLockOn, setWakeLockOn] = useState(false);
 
   // 保持屏幕常亮。只有 https / localhost 下才有这个 API，没有就算了 ——

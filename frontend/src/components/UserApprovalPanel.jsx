@@ -87,9 +87,9 @@ export default function UserApprovalPanel() {
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="font-display font-semibold text-sm flex items-center gap-1.5 px-1">
+        <h4 className="font-display font-semibold text-sm flex items-center gap-1.5 px-1">
           <Users size={15} className="text-indigo" /> {t('admin.title')}
-        </h3>
+        </h4>
         {pendingCount > 0 && (
           <span className="text-sm bg-wheat/15 text-wheat px-2.5 py-1 rounded-full font-medium">
             {t('admin.pendingCount', { count: pendingCount })}
@@ -108,10 +108,10 @@ export default function UserApprovalPanel() {
           {grouped.map((section) =>
             section.items.length === 0 && section.status !== 'pending' ? null : (
               <section key={section.status}>
-                <h3 className="text-sm font-medium text-ink/50 mb-2">
+                <h4 className="text-sm font-medium text-ink/50 mb-2">
                   {t(section.titleKey)}
                   {section.items.length > 0 && ` · ${section.items.length}`}
-                </h3>
+                </h4>
 
                 {section.items.length === 0 ? (
                   <p className="text-sm text-ink/35 bg-mist/40 rounded-xl px-3.5 py-3">

@@ -97,9 +97,9 @@ export default function StaplePanel() {
 
   return (
     <section className="bg-white rounded-xl shadow-card p-3.5">
-      <h3 className="font-display font-semibold flex items-center gap-2 mb-1">
+      <h4 className="font-display font-semibold flex items-center gap-2 mb-1">
         <Wheat size={17} className="text-wheat" /> {t('staple.title')}
-      </h3>
+      </h4>
       <p className="text-xs text-ink/45 leading-relaxed mb-3">{t('staple.intro')}</p>
 
       {error && <p className="text-persimmon text-sm mb-2">{error}</p>}

@@ -56,9 +56,9 @@ export default function NotificationPanel({ family, onFamilyChange }) {
 
   return (
     <section className="bg-white rounded-xl shadow-card p-3.5">
-      <h3 className="font-display font-semibold text-sm flex items-center gap-1.5 mb-3">
+      <h4 className="font-display font-semibold text-sm flex items-center gap-1.5 mb-3">
         <Bell size={15} className="text-indigo" /> {t('notify.title')}
-      </h3>
+      </h4>
 
       {error && <p className="text-persimmon text-xs mb-2">{error}</p>}
       {notice && <p className="text-indigo text-xs mb-2">{notice}</p>}

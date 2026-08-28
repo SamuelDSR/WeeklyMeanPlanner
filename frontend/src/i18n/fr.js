@@ -1,6 +1,7 @@
 // Français. 结构必须和 zh.js 一致；需要单复数的用 { one, other }（见 i18n/index.jsx）。
 export default {
   common: {
+    saved: 'Enregistré',
     close: 'Fermer',
     edit: 'Modifier',
     save: 'Enregistrer', cancel: 'Annuler', delete: 'Supprimer', remove: 'Retirer', edit: 'Modifier',
@@ -159,6 +160,9 @@ export default {
     weekPosition: 'Semaine {n} sur {total}', latestWeek: 'Dernière semaine',
   },
   settings: {
+    sectionAccount: 'Compte',
+    sectionFamily: 'Famille',
+    sectionAdmin: 'Administration',
     title: 'Réglages',
     accountTitle: 'Compte', displayName: 'Prénom', email: 'E-mail de connexion',
     language: 'Langue', logout: 'Se déconnecter',
@@ -259,6 +263,19 @@ export default {
     byCategory: 'Par catégorie', entries: 'Détail', noEntries: 'Rien d\'enregistré dans cette période',
     entryCount: '{count} dépenses',
     deleteExpenseConfirm: 'Supprimer cette dépense ?',
+  },
+  ledgerSettings: {
+    currencyTitle: 'Devise par défaut',
+    currencyHint: 'Pré-remplie quand vous ajoutez une dépense. Chaque dépense conserve sa propre devise : changer ceci ne touche pas aux entrées déjà saisies.',
+    noConversion: 'Les devises ne sont jamais converties — les totaux restent séparés. Les taux changent tous les jours ; en inventer un rendrait les comptes faux.',
+  },
+  cardSettings: {
+    landscapeTitle: 'À l\'ouverture d\'une carte',
+    landscapeLabel: 'Pivoter automatiquement les codes-barres 1D',
+    landscapeHint: 'De côté il est plus de deux fois plus long, donc mieux lu par les scanners. Les QR codes sont carrés et ne changent pas. Ne concerne que cet appareil.',
+    orderTitle: 'Ordre des cartes',
+    orderHint: 'Mettez devant les enseignes que vous fréquentez le plus — moins de balayages en caisse. L\'ordre est partagé avec la famille.',
+    noCards: 'Aucune carte',
   },
   timer: { start: 'Démarrer', pause: 'Pause', reset: 'Réinitialiser', done: 'C’est prêt !' },
 };
