@@ -220,6 +220,7 @@ export default {
     reviewNote: '模型可能看错或漏东西，保存前请自己过一遍。',
   },
   cards: {
+    staleNotice: '离线中，这是 {when} 同步的',
     title: '卡包', add: '加一张',
     intro: '全家共用的会员卡。点卡面就全屏放大，直接给收银台的扫码枪看。',
     empty: '还没有卡，点右上角加一张',
@@ -288,6 +289,16 @@ export default {
     noCamera: '这个页面用的是明文 http，浏览器不给用相机（只有 https 或 localhost 才行）。可以用下面的「从相册选一张」，或者配好 https 再来。',
     failed: '识别失败',
     usingFallback: '这个浏览器没有内置条码识别，正在用内置的解码器（第一次会多花几秒）',
+  },
+  offline: {
+    offline: '离线中 · 显示的是上次同步的数据',
+    offlineWithPending: '离线中 · {count} 条改动等着上传',
+    backOnline: '已联网',
+    syncing: '正在上传 {count} 条改动…',
+    retryNow: '立即重试',
+    failedCount: '{count} 条改动没能上传，点开看看',
+    queuedExpense: '离线中，这一笔先存在手机里，联网后会自动上传。',
+    needOnlineEdit: '改动需要联网才能保存（离线只能新记，不能改已有的）。',
   },
   timer: { start: '开始', pause: '暂停', reset: '重置', done: '时间到！' },
 };

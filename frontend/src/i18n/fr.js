@@ -231,6 +231,7 @@ export default {
     reviewNote: 'Le modèle peut se tromper ou oublier des choses — vérifiez avant d\'enregistrer.',
   },
   cards: {
+    staleNotice: 'Hors ligne — synchronisé {when}',
     title: 'Cartes', add: 'Ajouter',
     intro: 'Les cartes de fidélité de toute la famille. Touchez une carte pour l\'afficher en plein écran devant le scanner.',
     empty: 'Aucune carte — ajoutez-en une en haut à droite',
@@ -299,6 +300,16 @@ export default {
     noCamera: 'Cette page est servie en http simple : le navigateur refuse l\'accès à la caméra (https ou localhost uniquement). Utilisez « Choisir une photo » ci-dessous, ou passez en https.',
     failed: 'Lecture impossible',
     usingFallback: 'Ce navigateur n\'a pas de lecteur de codes-barres intégré ; un décodeur embarqué est utilisé (le premier scan prend quelques secondes de plus)',
+  },
+  offline: {
+    offline: 'Hors ligne · données de la dernière synchro',
+    offlineWithPending: 'Hors ligne · {count} modifications en attente',
+    backOnline: 'De nouveau en ligne',
+    syncing: 'Envoi de {count} modifications…',
+    retryNow: 'Réessayer',
+    failedCount: '{count} modifications n\'ont pas pu être envoyées — appuyez pour voir',
+    queuedExpense: 'Hors ligne — enregistré sur ce téléphone, envoi automatique dès la reconnexion.',
+    needOnlineEdit: 'La modification nécessite une connexion (hors ligne, vous pouvez ajouter mais pas modifier).',
   },
   timer: { start: 'Démarrer', pause: 'Pause', reset: 'Réinitialiser', done: 'C’est prêt !' },
 };

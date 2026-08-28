@@ -1,9 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { CreditCard, Plus, Trash2, Pencil, X, Camera, Loader2, ScanLine } from 'lucide-react';
+import { CreditCard, Plus, Trash2, Pencil, X, Camera, Loader2, ScanLine, CloudOff } from 'lucide-react';
 import {
   fetchCards, fetchCardMeta, createCard, updateCard, deleteCard,
 } from '../lib/cardData';
 import { uploadRecipePhoto } from '../lib/familyData';
+import { readCache, writeCache, cacheMeta, isNetworkError } from '../lib/localCache';
 import BarcodeView from '../components/BarcodeView';
 import CardScanView from '../components/CardScanView';
 // 扫码要拉 1 MB 的 wasm（只在没有原生 BarcodeDetector 的浏览器上），按需加载
@@ -16,13 +17,25 @@ const COLOR_CLASS = {
   matcha: 'bg-matcha', ink: 'bg-ink',
 };
 
+// 「上次同步」显示成粗略的相对时间。用 Intl 而不是自己拼字符串 ——
+// 三种语言的说法各不相同，硬编码中文会漏在界面上。
+function formatSavedAt(meta, locale) {
+  if (!meta?.savedAt) return '';
+  const rtf = new Intl.RelativeTimeFormat(locale === 'zh' ? 'zh-CN' : locale, { numeric: 'auto' });
+  const mins = Math.round((meta.savedAt - Date.now()) / 60000);
+  if (Math.abs(mins) < 60) return rtf.format(Math.min(-1, mins), 'minute');
+  const hours = Math.round(mins / 60);
+  if (Math.abs(hours) < 24) return rtf.format(hours, 'hour');
+  return rtf.format(Math.round(hours / 24), 'day');
+}
+
 const emptyDraft = () => ({
   name: '', code: '', codeFormat: 'CODE128', note: '', color: 'indigo',
   photoURL: null, thumbURL: null,
 });
 
 export default function CardWallet() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [cards, setCards] = useState(undefined);
   const [meta, setMeta] = useState({ formats: [], colors: [] });
   const [scanning, setScanning] = useState(null); // 正在全屏展示的卡
@@ -30,21 +43,37 @@ export default function CardWallet() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [stale, setStale] = useState(false); // 正在用本地缓存撑着
   const [scanning2, setScanning2] = useState(false); // 相机扫码面板
 
+  // 会员卡是「站在收银台前必须立刻打开」的东西，所以不等网络：
+  // 先把上次存的那份画出来，再去后台刷新。NetworkFirst 断网要等 3 秒超时，
+  // 排队的人可等不了。
   useEffect(() => {
+    const cached = readCache('cards');
+    if (cached) setCards(cached);
+    const cachedMeta = readCache('card-meta');
+    if (cachedMeta) setMeta(cachedMeta);
+
     let cancelled = false;
     Promise.all([fetchCards(), fetchCardMeta()])
       .then(([list, m]) => {
         if (cancelled) return;
         setCards(list);
         setMeta(m);
+        writeCache('cards', list);
+        writeCache('card-meta', m);
+        setStale(false);
       })
       .catch((e) => {
-        if (!cancelled) {
-          setCards([]);
-          setError(e.message || t('common.loadFailed'));
+        if (cancelled) return;
+        // 断网但本地有存货：照常用，只是标一下「这是上次同步的」
+        if (isNetworkError(e) && readCache('cards')) {
+          setStale(true);
+          return;
         }
+        if (!readCache('cards')) setCards([]);
+        setError(e.message || t('common.loadFailed'));
       });
     return () => {
       cancelled = true;
@@ -52,7 +81,10 @@ export default function CardWallet() {
   }, []);
 
   async function reload() {
-    setCards(await fetchCards());
+    const list = await fetchCards();
+    setCards(list);
+    writeCache('cards', list);
+    setStale(false);
   }
 
   async function handleSave() {
@@ -115,7 +147,13 @@ export default function CardWallet() {
           <Plus size={16} /> {t('cards.add')}
         </button>
       </div>
-      <p className="text-xs text-ink/45 mb-4">{t('cards.intro')}</p>
+      <p className="text-xs text-ink/45 mb-2">{t('cards.intro')}</p>
+      {/* 离线时明说这是上次同步的数据 —— 卡号不会变，所以照用无妨，但得让人知道 */}
+      {stale && (
+        <p className="text-[11px] text-wheat mb-3 flex items-center gap-1">
+          <CloudOff size={11} /> {t('cards.staleNotice', { when: formatSavedAt(cacheMeta('cards'), locale) })}
+        </p>
+      )}
 
       {error && <p className="text-persimmon text-sm mb-3">{error}</p>}
 

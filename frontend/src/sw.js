@@ -3,14 +3,28 @@
 //
 // 为什么不再用自动生成的：自动生成的 SW 没法插入 push / notificationclick 处理，
 // 而做饭提醒必须靠这两个事件。缓存策略和之前保持一致（见 vite.config.js 的注释）。
-import { precacheAndRoute, cleanupOutdatedCaches } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import { precacheAndRoute, cleanupOutdatedCaches, createHandlerBoundToURL } from 'workbox-precaching';
+import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { CacheFirst, NetworkFirst } from 'workbox-strategies';
 import { ExpirationPlugin } from 'workbox-expiration';
 
 // 应用外壳（HTML/JS/CSS）：构建时由 injectManifest 填进来
 precacheAndRoute(self.__WB_MANIFEST || []);
 cleanupOutdatedCaches();
+
+// 单页应用的导航必须单独接管。
+//
+// precacheAndRoute 只会为清单里的 URL 建路由 —— 也就是只认 '/index.html'。
+// 直接打开 /cards、/ledger 这些前端路由时，请求的是 '/cards'，清单里没有，
+// 于是走网络；断网就是 Chrome 的小恐龙页面。
+// 装成 App 之后每次冷启动都是一次导航请求，所以少了这一条，整个离线能力等于零。
+//
+// API 和上传的图片不能被当成导航吞掉（它们各自有下面的策略）。
+registerRoute(
+  new NavigationRoute(createHandlerBoundToURL('index.html'), {
+    denylist: [/^\/api\//, /^\/uploads\//],
+  })
+);
 
 // 菜品照片：同源 /uploads/，内容不会变，缓存优先
 registerRoute(
@@ -26,7 +40,11 @@ registerRoute(
 // 刚改完的东西会"消失几秒再回来"。/api/auth 故意不缓存（登录状态）。
 registerRoute(
   ({ url }) =>
-    /^\/api\/(recipes|menu|shopping|history|family|units)/.test(url.pathname),
+    // 所有只读的业务接口都缓存住。少写一个模块，那个页面断网就是白的 ——
+    // 卡包、记账当初就是这么漏掉的。/api/auth 故意不在里面（登录状态不该来自缓存）。
+    /^\/api\/(recipes|menu|shopping|history|family|units|cards|ledgers|expenses|staples)/.test(
+      url.pathname
+    ),
   new NetworkFirst({
     cacheName: 'api-data-v2',
     networkTimeoutSeconds: 3,

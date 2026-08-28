@@ -457,6 +457,27 @@ const MIGRATIONS = [
       CREATE INDEX IF NOT EXISTS idx_expenses_kind ON expenses(family_id, kind, spent_on DESC);
     `,
   },
+  {
+    name: '015_offline_sync',
+    sql: `
+      -- 离线补发用的幂等键。
+      --
+      -- 场景：手机没信号时记了一笔，请求发出去了但响应没回来。客户端不知道
+      -- 服务器到底收没收到，只能重发 —— 没有这个键的话就会记成两笔。
+      -- 客户端每条待同步的操作自己生成一个 id，服务器认这个 id：
+      -- 已经有了就把原来那条原样返回，而不是再插一条。
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS client_op_id TEXT;
+
+      DO $$ BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_indexes WHERE indexname = 'expenses_client_op_id_key'
+        ) THEN
+          CREATE UNIQUE INDEX expenses_client_op_id_key
+            ON expenses(client_op_id) WHERE client_op_id IS NOT NULL;
+        END IF;
+      END $$;
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

@@ -1,20 +1,38 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { readCache, writeCache, clearAllCache, isNetworkError } from '../lib/localCache';
 
 const AuthContext = createContext(null);
 
+const ME_CACHE = 'auth-me';
+
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(undefined); // undefined = 加载中, null = 未登录
-  const [family, setFamily] = useState(undefined);
+  // 先用上次记下的身份开局：断网时不用等 /auth/me 超时才知道自己是谁
+  const cachedUser = readCache(ME_CACHE);
+  const [user, setUser] = useState(cachedUser === null ? undefined : cachedUser);
+  const [family, setFamily] = useState(cachedUser?.family ?? undefined);
+  // 是不是正在用本地缓存撑着（界面上要给个提示）
+  const [offline, setOffline] = useState(false);
 
   async function refreshMe() {
     try {
       const { user } = await api.get('/auth/me');
       setUser(user);
       setFamily(user.family || null);
-    } catch {
+      writeCache(ME_CACHE, user);
+      setOffline(false);
+    } catch (err) {
+      // 断网 != 未登录。cookie 还是好的，只是暂时够不着服务器 ——
+      // 这时候把人踢到登录页，等于地铁里一打开应用就什么都看不了。
+      if (isNetworkError(err) && readCache(ME_CACHE)) {
+        setOffline(true);
+        return; // 保持上次的身份不动
+      }
+      // 服务器明确说不行（401 / 403 / 账号被删）才真的退出
       setUser(null);
       setFamily(null);
+      clearAllCache();
+      setOffline(false);
     }
   }
 
@@ -47,9 +65,12 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
-    await api.post('/auth/logout');
+    await api.post('/auth/logout').catch(() => {
+      // 离线也让人退得掉，本地状态该清就清
+    });
     setUser(null);
     setFamily(null);
+    clearAllCache();
   }
 
   async function createFamily(name) {
@@ -85,6 +106,9 @@ export function AuthProvider({ children }) {
         user,
         family,
         isAdmin: !!user?.isAdmin,
+        // 「够不着服务器」的权威信号：navigator.onLine 说的是有没有网卡连着，
+        // 冷启动时它会报 true 而请求全都失败，所以以我们自己的请求为准
+        offline,
         register,
         login,
         logout,

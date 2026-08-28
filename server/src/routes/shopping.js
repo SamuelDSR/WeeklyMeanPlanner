@@ -161,6 +161,31 @@ router.post('/generate', async (req, res) => {
   }
 });
 
+// 直接指定勾成什么状态（而不是「翻转」）。
+//
+// 离线补发必须用这个：翻转不是幂等的 —— 请求到了但响应丢了，客户端重发一次
+// 就又翻回去了，用户看到的是「我明明勾上了，过一会儿自己没了」。
+// 指定目标状态的话，发几次结果都一样。
+router.patch('/item/:id', async (req, res) => {
+  const itemId = Number(req.params.id);
+  if (typeof req.body?.checked !== 'boolean') {
+    return res.status(400).json({ error: 'checked 必须是 true 或 false' });
+  }
+  const owns = await query(
+    `SELECT sli.id FROM shopping_list_items sli
+     JOIN shopping_lists sl ON sl.id = sli.shopping_list_id
+     WHERE sli.id=$1 AND sl.family_id=$2`,
+    [itemId, req.user.familyId]
+  );
+  if (owns.rows.length === 0) return res.status(404).json({ error: '没找到这一项' });
+
+  const result = await query(
+    'UPDATE shopping_list_items SET checked=$1 WHERE id=$2 RETURNING checked',
+    [req.body.checked, itemId]
+  );
+  res.json({ id: itemId, checked: result.rows[0].checked });
+});
+
 router.patch('/item/:id/toggle', async (req, res) => {
   const itemId = Number(req.params.id);
   // 校验这个 item 属于当前用户的家庭，避免越权改到别人家的数据

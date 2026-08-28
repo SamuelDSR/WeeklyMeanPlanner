@@ -178,6 +178,20 @@ router.post('/', async (req, res) => {
   const { error, value } = await validateExpense(req.body, req.user.familyId);
   if (error) return res.status(400).json({ error });
 
+  // 离线补发：同一个 client_op_id 只入账一次。
+  // 手机没信号时请求可能已经到了、响应却丢了，客户端只能重发 ——
+  // 没有这道判断就会记成两笔。
+  const opId = typeof req.body?.clientOpId === 'string' ? req.body.clientOpId.slice(0, 64) : null;
+  if (opId) {
+    const dup = await query(
+      `SELECT e.*, l.name AS ledger_name FROM expenses e
+         LEFT JOIN ledgers l ON l.id = e.ledger_id
+        WHERE e.client_op_id=$1 AND e.family_id=$2`,
+      [opId, req.user.familyId]
+    );
+    if (dup.rows[0]) return res.json({ expense: toExpenseJson(dup.rows[0]), duplicate: true });
+  }
+
   // 没指定付款人就默认记在自己头上
   if (value.paid_by === undefined) {
     const me = await query('SELECT display_name FROM users WHERE id=$1', [req.user.userId]);
@@ -187,8 +201,8 @@ router.post('/', async (req, res) => {
 
   const result = await query(
     `INSERT INTO expenses (family_id, ledger_id, spent_on, kind, amount, currency, category, note,
-                           paid_by, paid_by_name, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+                           paid_by, paid_by_name, created_by, client_op_id)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
     [
       req.user.familyId,
       value.ledger_id ?? null,
@@ -201,6 +215,7 @@ router.post('/', async (req, res) => {
       value.paid_by ?? null,
       value.paid_by_name ?? null,
       req.user.userId,
+      opId,
     ]
   );
   res.json({ expense: toExpenseJson(result.rows[0]) });

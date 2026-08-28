@@ -98,8 +98,10 @@ export async function generateShoppingList(week) {
   return api.post(`/shopping/generate?week=${week}`); // 返回 { list, missingDishNames }
 }
 
-export async function toggleShoppingItem(itemId) {
-  return api.patch(`/shopping/item/${itemId}/toggle`);
+// 直接指定勾成什么状态。不用 toggle 是因为它不幂等：
+// 离线补发时重复发一次就会翻回去（见 lib/syncQueue.js）。
+export async function setShoppingItemChecked(itemId, checked) {
+  return api.patch(`/shopping/item/${itemId}`, { checked });
 }
 
 // ---------- 主食（米饭 / 面条 / 意面…）----------

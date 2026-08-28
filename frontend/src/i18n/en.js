@@ -231,6 +231,7 @@ export default {
     reviewNote: 'The model can misread or miss things — check it before saving.',
   },
   cards: {
+    staleNotice: 'Offline — synced {when}',
     title: 'Cards', add: 'Add one',
     intro: 'Loyalty cards the whole family shares. Tap a card to show it full-screen for the scanner.',
     empty: 'No cards yet — add one from the top right',
@@ -299,6 +300,16 @@ export default {
     noCamera: 'This page is served over plain http, so the browser will not allow camera access (https or localhost only). Use "Pick a photo instead" below, or set up https.',
     failed: 'Could not read it',
     usingFallback: 'This browser has no built-in barcode reader, so a bundled decoder is being used (the first scan takes a few extra seconds)',
+  },
+  offline: {
+    offline: 'Offline · showing the last synced data',
+    offlineWithPending: 'Offline · {count} changes waiting to upload',
+    backOnline: 'Back online',
+    syncing: 'Uploading {count} changes…',
+    retryNow: 'Retry now',
+    failedCount: '{count} changes could not be uploaded — tap to see',
+    queuedExpense: 'Offline — saved on this phone and will upload automatically once you reconnect.',
+    needOnlineEdit: 'Editing needs a connection (offline you can add new entries, but not change existing ones).',
   },
   timer: { start: 'Start', pause: 'Pause', reset: 'Reset', done: 'Time’s up!' },
 };

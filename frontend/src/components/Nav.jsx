@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { UtensilsCrossed, Wallet, CreditCard, Settings } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useI18n } from '../i18n';
+import OfflineBar from './OfflineBar';
 
 // 底部四个 tab。
 //
@@ -30,6 +31,8 @@ export default function Nav() {
             {family?.name ? `${family.name} · ${t('nav.appName')}` : t('nav.appName')}
           </h1>
         </div>
+        {/* 离线 / 待同步的提示条：贴在标题下面，每个页面都看得到 */}
+        <OfflineBar />
       </header>
 
       {/* 底部导航：适配手机拇指操作 */}

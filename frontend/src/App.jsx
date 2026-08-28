@@ -1,8 +1,9 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { I18nProvider } from './i18n';
 import ProtectedRoute from './components/ProtectedRoute';
+import { installSyncTriggers } from './lib/syncQueue';
 import AuthedRoute from './components/AuthedRoute';
 import Login from './pages/Login';
 import WeeklyMenu from './pages/WeeklyMenu';
@@ -23,6 +24,11 @@ function PageLoading() {
 }
 
 export default function App() {
+  // 联网 / 回到前台 / 启动时，把离线攒下的操作补发出去
+  useEffect(() => {
+    installSyncTriggers();
+  }, []);
+
   return (
     <I18nProvider>
       <AuthProvider>

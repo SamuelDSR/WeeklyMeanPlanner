@@ -9,6 +9,8 @@ import {
   createExpense, updateExpense, deleteExpense,
 } from '../lib/ledgerData';
 import { fetchFamily } from '../lib/familyAdmin';
+import { enqueue, flushQueue } from '../lib/syncQueue';
+import { isNetworkError } from '../lib/localCache';
 import {
   formatMoney, formatTotals, currentMonth, shiftPeriod, isFuturePeriod, toGranularity,
 } from '../lib/formatMoney';
@@ -89,15 +91,26 @@ export default function Ledger() {
   async function saveEntry(value) {
     setEntryError('');
     setBusy(true);
+    const { id, ...rest } = entry;
+    const data = { ...rest, amount: String(value) };
     try {
-      const { id, ...rest } = entry;
-      const data = { ...rest, amount: String(value) };
       if (id) await updateExpense(id, data);
       else await createExpense(data);
       await load();
       setEntry(null);
     } catch (e) {
-      setEntryError(e.message || t('common.saveFailed'));
+      // 断网时**新记的一笔**存进队列，联网自动补发 —— 在外面花的钱最该当场记下来。
+      // 「改一笔」不排队：那是修改，家里人可能同时也在改同一条，
+      // 离线补发会无声地盖掉别人的改动（详见 lib/syncQueue.js）。
+      if (!id && isNetworkError(e)) {
+        enqueue('expense.create', data);
+        setEntry(null);
+        setError(t('offline.queuedExpense'));
+      } else {
+        setEntryError(
+          isNetworkError(e) ? t('offline.needOnlineEdit') : e.message || t('common.saveFailed')
+        );
+      }
     } finally {
       setBusy(false);
     }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { subscribeShoppingList, toggleShoppingItem } from '../lib/familyData';
-import { queueOfflineToggle, flushOfflineQueue } from '../lib/offlineQueue';
+import { subscribeShoppingList, setShoppingItemChecked } from '../lib/familyData';
+import { enqueue, flushQueue } from '../lib/syncQueue';
 import { useI18n } from '../i18n';
 import EatTabs from '../components/EatTabs';
 import WeekTabs from '../components/WeekTabs';
@@ -15,9 +15,9 @@ export default function ShoppingList() {
   const [week, setWeek] = useState('current');
 
   useEffect(() => {
-    const onOnline = () => flushOfflineQueue();
+    const onOnline = () => flushQueue();
     window.addEventListener('online', onOnline);
-    flushOfflineQueue(); // 打开页面时如果之前离线攒了操作，先尝试补发一次
+    flushQueue(); // 打开页面时如果之前离线攒了操作，先尝试补发一次
     return () => window.removeEventListener('online', onOnline);
   }, []);
 
@@ -40,17 +40,19 @@ export default function ShoppingList() {
 
   async function handleToggle(itemId) {
     localVersion.current += 1;
-    // 乐观更新：先改本地界面，不等网络请求回来，做饭/购物时手感更快
-    const optimistic = list.items.map((it) =>
-      it.id === itemId ? { ...it, checked: !it.checked } : it
-    );
-    setList({ ...list, items: optimistic });
+    const target = !list.items.find((it) => it.id === itemId)?.checked;
+    // 乐观更新：先改本地界面，不等网络请求回来，购物时手感更快
+    setList({
+      ...list,
+      items: list.items.map((it) => (it.id === itemId ? { ...it, checked: target } : it)),
+    });
 
     try {
-      await toggleShoppingItem(itemId);
-    } catch (e) {
-      // 离线或请求失败：把这次操作记下来，联网后自动补发，界面上先保留乐观更新的样子
-      queueOfflineToggle(itemId);
+      await setShoppingItemChecked(itemId, target);
+    } catch {
+      // 离线：记下**目标状态**而不是「翻转」。翻转不是幂等的 ——
+      // 请求其实到了、只是响应丢了的话，补发一次就又翻回去了。
+      enqueue('shopping.setChecked', { itemId, checked: target });
     }
   }
 

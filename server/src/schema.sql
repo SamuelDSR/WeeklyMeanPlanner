@@ -49,7 +49,7 @@ INSERT INTO schema_migrations (name) VALUES
   ('006_eat_out_history_ratings'), ('007_meal_likes_history_survives'),
   ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications'),
   ('011_optional_ingredients_staples'), ('012_drop_breakfast_slot'),
-  ('013_cards_and_ledgers'), ('014_income_and_categories');
+  ('013_cards_and_ledgers'), ('014_income_and_categories'), ('015_offline_sync');
 
 -- families.owner_id -> users.id：两张表互相引用，所以等 users 建完再补这个外键
 ALTER TABLE families
@@ -288,10 +288,13 @@ CREATE TABLE expenses (
   paid_by      INTEGER REFERENCES users(id) ON DELETE SET NULL,
   paid_by_name TEXT,                                 -- 名字快照，人删了记录还认得
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  -- 离线补发的幂等键：客户端生成，重发时靠它认出「这条已经收过了」
+  client_op_id TEXT,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT expenses_amount_check CHECK (amount <> 0),
   CONSTRAINT expenses_kind_check CHECK (kind IN ('expense', 'income'))
 );
 CREATE INDEX idx_expenses_kind ON expenses(family_id, kind, spent_on DESC);
+CREATE UNIQUE INDEX expenses_client_op_id_key ON expenses(client_op_id) WHERE client_op_id IS NOT NULL;
 CREATE INDEX idx_expenses_family_date ON expenses(family_id, spent_on DESC);
 CREATE INDEX idx_expenses_ledger ON expenses(ledger_id);
