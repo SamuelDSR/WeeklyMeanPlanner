@@ -13,7 +13,8 @@ import { cardLandscape } from '../lib/devicePrefs';
 //   - 手动横屏按钮：手机大多锁了竖屏，不能指望它自己转
 export default function CardScanView({ card, onClose }) {
   const { t } = useI18n();
-  // 二维码是方的，横过来没有意义；一维码看这台设备的偏好（设置里能改）
+  // 只有 QR 是方的，横过来没意义。一维码和 PDF417（堆叠式，又宽又扁）
+  // 都是横过来更长、更好扫。是否自动横屏看这台设备的偏好（设置里能改）。
   const [landscape, setLandscape] = useState(
     () => card.codeFormat !== 'QR' && cardLandscape.get()
   );
@@ -49,7 +50,7 @@ export default function CardScanView({ card, onClose }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  const isQr = card.codeFormat === 'QR';
+  const isSquare = card.codeFormat === 'QR'; // 方的只有 QR
 
   return (
     // 白底铺满，盖住 App 自己的配色
@@ -65,7 +66,7 @@ export default function CardScanView({ card, onClose }) {
               <Sun size={12} /> {t('cards.screenOn')}
             </span>
           )}
-          {!isQr && (
+          {!isSquare && (
             <button
               type="button"
               onClick={() => setLandscape((v) => !v)}
@@ -90,14 +91,14 @@ export default function CardScanView({ card, onClose }) {
       {/* 码本体：横屏模式下旋转 90 度，长度能翻一倍多 */}
       <div className="flex-1 flex items-center justify-center overflow-hidden px-2 pb-4">
         <div
-          className={landscape && !isQr ? 'origin-center' : 'w-full'}
+          className={landscape && !isSquare ? 'origin-center' : 'w-full'}
           style={
-            landscape && !isQr
+            landscape && !isSquare
               ? { transform: 'rotate(90deg)', width: '78vh', maxWidth: '78vh' }
               : undefined
           }
         >
-          <BarcodeView code={card.code} format={card.codeFormat} height={isQr ? 0 : 150} />
+          <BarcodeView code={card.code} format={card.codeFormat} height={isSquare ? 0 : 150} />
         </div>
       </div>
 

@@ -26,9 +26,15 @@ export default function run() {
   ok('QR 装网址', validateCode('https://example.com/card/abc', 'QR'));
   ok('QR 装中文', validateCode('会员号：12345', 'QR'));
 
+  // PDF417：堆叠式二维码，容量大，和 QR 一样不挑字符
+  ok('PDF417 卡号', validateCode('CARD-9988776655', 'PDF417'));
+  ok('PDF417 装网址', validateCode('https://example.com/loyalty/abc', 'PDF417'));
+  ok('PDF417 装中文', validateCode('会员号：12345', 'PDF417'));
+  rejects('PDF417 也不能为空', validateCode('   ', 'PDF417'));
+
   rejects('空', validateCode('', 'CODE128'));
   rejects('只有空格', validateCode('   ', 'CODE128'));
-  rejects('未知格式', validateCode('123', 'PDF417'));
+  rejects('未知格式（Aztec 我们画不出来）', validateCode('123', 'AZTEC'));
   rejects('超长', validateCode('x'.repeat(513), 'CODE128'));
 
   return done();

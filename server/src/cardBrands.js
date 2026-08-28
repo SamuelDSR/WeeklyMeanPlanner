@@ -45,6 +45,8 @@ export const CARD_BRANDS = [
   { slug: 'pharmacie', name: 'Pharmacie', color: '#00A94F', short: '✚', format: 'CODE128', group: 'other' },
   { slug: 'total', name: 'TotalEnergies', color: '#ED0000', short: 'T', format: 'EAN13', group: 'other' },
   { slug: 'sncf', name: 'SNCF', color: '#8D1B3D', short: 'SN', format: 'QR', group: 'other' },
+  { slug: 'norauto', name: 'Norauto', color: '#0069B4', short: 'No', format: 'CODE128', group: 'other' },
+  { slug: 'kiabi', name: 'Kiabi', color: '#E5007D', short: 'Ki', format: 'EAN13', group: 'other' },
 ];
 
 const BY_SLUG = new Map(CARD_BRANDS.map((b) => [b.slug, b]));

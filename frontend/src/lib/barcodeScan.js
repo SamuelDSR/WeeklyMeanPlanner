@@ -18,15 +18,34 @@ const FROM_DETECTOR = {
   code_39: 'CODE39',
   itf: 'ITF',
   qr_code: 'QR',
+  pdf417: 'PDF417',
 };
 
 // 交给检测器的格式白名单：只找我们画得出来的，找得更快也更少认错
 const WANTED = Object.keys(FROM_DETECTOR);
 
+// 这几个是**必须**能扫的，法国这边的会员卡基本都在里面。
+// 原生少了其中任何一个就退到 wasm；
+// 而 upc_a 这类（美国零售用得多、这边少见）缺了就缺了，
+// 不值得为它让每个人多下 1 MB。
+const REQUIRED = ['ean_13', 'ean_8', 'code_128', 'code_39', 'itf', 'qr_code', 'pdf417'];
+
 let detectorPromise = null;
 
 export function hasNativeDetector() {
   return typeof window !== 'undefined' && 'BarcodeDetector' in window;
+}
+
+// 原生检测器认不认得全我们要的格式（认不全就得下载 wasm）。
+// 界面上用它来提示「第一次扫要多等几秒」。
+export async function nativeCoversAll() {
+  if (!hasNativeDetector()) return false;
+  try {
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    return REQUIRED.every((f) => supported.includes(f));
+  } catch {
+    return false;
+  }
 }
 
 // 摄像头只在安全上下文（https / localhost）里能用。
@@ -38,7 +57,20 @@ export function cameraAvailable() {
 
 async function loadDetector() {
   if (hasNativeDetector()) {
-    return new window.BarcodeDetector({ formats: WANTED });
+    // 构造器传了平台不支持的格式会直接抛 NotSupportedError，所以先问一遍。
+    // 各家实现支持的格式并不一样（PDF417 尤其参差），不能想当然。
+    let supported = [];
+    try {
+      supported = await window.BarcodeDetector.getSupportedFormats();
+    } catch {
+      supported = [];
+    }
+    const usable = WANTED.filter((f) => supported.includes(f));
+    // 必需的格式都在就用原生（零下载），能多认几个是几个。
+    // 缺了必需的（常见是 PDF417）才退到 wasm —— 缺的往往正是用户要扫的那张。
+    if (REQUIRED.every((f) => supported.includes(f))) {
+      return new window.BarcodeDetector({ formats: usable });
+    }
   }
   // 按需加载：1 MB 的 wasm 不该让每个人在打开应用时就下载
   const [{ BarcodeDetector, setZXingModuleOverrides }, wasmUrl] = await Promise.all([

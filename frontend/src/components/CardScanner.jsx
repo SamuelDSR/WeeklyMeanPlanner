@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, Camera, Image as ImageIcon, Loader2, ScanLine } from 'lucide-react';
-import { detectFromSource, detectFromFile, cameraAvailable, hasNativeDetector } from '../lib/barcodeScan';
+import { detectFromSource, detectFromFile, cameraAvailable, nativeCoversAll } from '../lib/barcodeScan';
 import { useI18n } from '../i18n';
 
 // 对着卡扫一下，把号码读出来 —— 比照着 13 位数字手输可靠得多。
@@ -16,6 +16,7 @@ export default function CardScanner({ onDetected, onClose }) {
   const [status, setStatus] = useState('starting'); // starting | scanning | error
   const [error, setError] = useState('');
   const [decodingFile, setDecodingFile] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -170,7 +171,7 @@ export default function CardScanner({ onDetected, onClose }) {
           <input type="file" accept="image/*" className="hidden" onChange={handleFile} />
         </label>
 
-        {!hasNativeDetector() && (
+        {usingFallback && (
           <p className="text-porcelain/35 text-[11px] text-center">{t('scan.usingFallback')}</p>
         )}
       </div>

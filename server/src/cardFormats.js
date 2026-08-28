@@ -10,6 +10,8 @@ export const CARD_FORMATS = [
   { value: 'CODE39', label: 'Code 39', kind: '1d' },
   { value: 'ITF', label: 'ITF', kind: '1d' },
   { value: 'QR', label: 'QR', kind: '2d' },
+  // PDF417：堆叠式二维码，又宽又扁。法国这边有些会员卡、驾照、登机牌用它。
+  { value: 'PDF417', label: 'PDF417', kind: '2d' },
 ];
 
 const BY_VALUE = new Map(CARD_FORMATS.map((f) => [f.value, f]));
@@ -53,8 +55,8 @@ export function validateCode(code, format) {
   if (raw.length > 512) return { error: '卡号太长了' };
   if (!isValidFormat(format)) return { error: '不认识这个码的格式' };
 
-  // QR 什么都能装（网址、会员号、一串 JSON）
-  if (format === 'QR') return { value: raw };
+  // QR 和 PDF417 都是二维码，容量大、什么都能装（网址、会员号、一串 JSON）
+  if (format === 'QR' || format === 'PDF417') return { value: raw };
 
   // 1D 码不允许出现空白：扫码枪读不出来，而且常常是复制粘贴带进来的
   const compact = raw.replace(/\s/g, '');
