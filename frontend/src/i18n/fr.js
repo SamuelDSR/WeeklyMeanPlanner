@@ -35,9 +35,9 @@ export default {
   nav: {
     eat: 'Repas',
     ledger: 'Dépenses',
-    cards: 'Cartes', menu: 'Cette semaine', recipes: 'Recettes', shopping: 'Courses', settings: 'Réglages', appName: 'Menu Maison' },
+    cards: 'Cartes', menu: 'Cette semaine', recipes: 'Recettes', shopping: 'Courses', settings: 'Réglages', appName: 'Maisonnée' },
   login: {
-    tagline: 'Menu hebdo de la famille · liste de courses',
+    tagline: 'Repas · dépenses · cartes partagées',
     displayName: 'Votre prénom', email: 'E-mail', password: 'Mot de passe (6 caractères min.)',
     signIn: 'Se connecter', signUp: 'Créer un compte',
     toSignUp: 'Pas encore de compte ? Créez-en un', toSignIn: 'Vous avez déjà un compte ? Connectez-vous',

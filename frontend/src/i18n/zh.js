@@ -34,9 +34,9 @@ export default {
   nav: {
     eat: '吃饭',
     ledger: '记账',
-    cards: '卡包', menu: '本周菜谱', recipes: '菜品库', shopping: '购物清单', settings: '设置', appName: '食谱管家' },
+    cards: '卡包', menu: '本周菜谱', recipes: '菜品库', shopping: '购物清单', settings: '设置', appName: '持家' },
   login: {
-    tagline: '家庭每周菜谱 · 购物清单',
+    tagline: '排菜单 · 记开销 · 共享会员卡',
     displayName: '你的称呼', email: '邮箱', password: '密码（至少6位）',
     signIn: '登录', signUp: '注册',
     toSignUp: '还没有账号？去注册', toSignIn: '已经有账号？去登录',

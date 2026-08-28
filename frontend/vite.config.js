@@ -18,9 +18,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['icons/icon-192.png', 'icons/icon-512.png'],
       manifest: {
-        name: '食谱管家',
-        short_name: '食谱管家',
-        description: '家庭每周食谱规划：推荐菜单、做法步骤、自动购物清单',
+        name: '持家',
+        short_name: '持家',
+        description: '一家人的日子：排菜单、算开销、共享会员卡',
         theme_color: '#2C4A6B',
         background_color: '#EEF1EF',
         display: 'standalone',

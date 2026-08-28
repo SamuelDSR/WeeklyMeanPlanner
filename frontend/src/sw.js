@@ -60,7 +60,7 @@ self.addEventListener('push', (event) => {
     data = { body: event.data?.text?.() || '' };
   }
 
-  const title = data.title || '食谱管家';
+  const title = data.title || '持家';
   const options = {
     body: data.body || '',
     icon: '/icons/icon-192.png',

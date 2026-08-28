@@ -116,7 +116,7 @@ async function start() {
   await initPush();
   startMealReminderLoop();
   app.listen(PORT, () => {
-    console.log(`食谱管家 API 已启动，监听端口 ${PORT}`);
+    console.log(`持家 API 已启动，监听端口 ${PORT}`);
   });
 }
 

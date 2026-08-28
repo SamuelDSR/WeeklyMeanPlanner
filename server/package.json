@@ -1,7 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "description": "食谱管家后端 API",
+  "description": "持家后端 API",
   "type": "module",
   "main": "src/index.js",
   "scripts": {

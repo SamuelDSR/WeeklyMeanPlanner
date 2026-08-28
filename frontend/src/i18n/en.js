@@ -35,9 +35,9 @@ export default {
   nav: {
     eat: 'Food',
     ledger: 'Money',
-    cards: 'Cards', menu: 'This week', recipes: 'Recipes', shopping: 'Shopping', settings: 'Settings', appName: 'Meal Planner' },
+    cards: 'Cards', menu: 'This week', recipes: 'Recipes', shopping: 'Shopping', settings: 'Settings', appName: 'Household' },
   login: {
-    tagline: 'Weekly family menu · shopping list',
+    tagline: 'Meals · money · shared cards',
     displayName: 'Your name', email: 'Email', password: 'Password (6+ characters)',
     signIn: 'Sign in', signUp: 'Sign up',
     toSignUp: "No account yet? Sign up", toSignIn: 'Already have an account? Sign in',

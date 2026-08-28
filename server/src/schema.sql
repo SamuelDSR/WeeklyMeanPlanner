@@ -1,4 +1,4 @@
--- 食谱管家数据库结构
+-- 持家数据库结构
 -- 这个文件会在 Postgres 容器第一次启动、数据目录为空时自动执行
 -- （docker-compose 里挂在 /docker-entrypoint-initdb.d/ 下）
 
