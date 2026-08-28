@@ -34,6 +34,18 @@ registerRoute(
   })
 );
 
+// 条码识别用的 wasm（约 1 MB）：不进预缓存 —— 只有 iOS 这类没有原生
+// BarcodeDetector 的浏览器才用得上，让所有人装应用时都下载它太亏。
+// 但扫过一次之后要能离线用（超市里信号常常很差），所以按内容缓存起来。
+// 文件名带哈希，内容变了就是新 URL，不用操心过期。
+registerRoute(
+  ({ url }) => url.pathname.endsWith('.wasm'),
+  new CacheFirst({
+    cacheName: 'wasm-v1',
+    plugins: [new ExpirationPlugin({ maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 * 180 })],
+  })
+);
+
 // 新版本装好后立刻接管（对应 registerType: 'autoUpdate'）
 self.skipWaiting();
 self.addEventListener('activate', () => self.clients.claim());

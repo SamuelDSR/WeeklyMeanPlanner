@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
-import { CreditCard, Plus, Trash2, Pencil, X, Camera, Loader2 } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { CreditCard, Plus, Trash2, Pencil, X, Camera, Loader2, ScanLine } from 'lucide-react';
 import {
   fetchCards, fetchCardMeta, createCard, updateCard, deleteCard,
 } from '../lib/cardData';
 import { uploadRecipePhoto } from '../lib/familyData';
 import BarcodeView from '../components/BarcodeView';
 import CardScanView from '../components/CardScanView';
+// 扫码要拉 1 MB 的 wasm（只在没有原生 BarcodeDetector 的浏览器上），按需加载
+const CardScanner = lazy(() => import('../components/CardScanner'));
 import { useI18n } from '../i18n';
 
 // 卡包：全家共享的会员卡。点一张就全屏放大给扫码枪看。
@@ -28,6 +30,7 @@ export default function CardWallet() {
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [scanning2, setScanning2] = useState(false); // 相机扫码面板
 
   useEffect(() => {
     let cancelled = false;
@@ -169,6 +172,20 @@ export default function CardWallet() {
         </div>
       )}
 
+      {/* 相机扫码。扫到就把码和格式一起填回表单 —— 格式也是扫出来的，
+          用户不用再去猜这张卡是 EAN-13 还是 Code 128。 */}
+      {scanning2 && (
+        <Suspense fallback={null}>
+          <CardScanner
+            onClose={() => setScanning2(false)}
+            onDetected={({ code, format }) => {
+              setEditing((d) => ({ ...(d || emptyDraft()), code, codeFormat: format }));
+              setScanning2(false);
+            }}
+          />
+        </Suspense>
+      )}
+
       {/* 新增 / 编辑 */}
       {editing && (
         <div className="fixed inset-0 z-40 bg-ink/40 flex items-end sm:items-center justify-center p-0 sm:p-4">
@@ -213,12 +230,22 @@ export default function CardWallet() {
 
               <div>
                 <label className="text-sm text-ink/60 block mb-1">{t('cards.code')}</label>
-                <input
-                  value={editing.code}
-                  onChange={(e) => setEditing({ ...editing, code: e.target.value })}
-                  placeholder={t('cards.codePlaceholder')}
-                  className="w-full px-3 py-2 rounded-lg border border-mist bg-white font-mono outline-none"
-                />
+                <div className="flex gap-2">
+                  <input
+                    value={editing.code}
+                    onChange={(e) => setEditing({ ...editing, code: e.target.value })}
+                    placeholder={t('cards.codePlaceholder')}
+                    className="flex-1 min-w-0 px-3 py-2 rounded-lg border border-mist bg-white font-mono outline-none"
+                  />
+                  {/* 对着卡扫一下比照着 13 位数字手输可靠得多 */}
+                  <button
+                    type="button"
+                    onClick={() => setScanning2(true)}
+                    className="shrink-0 px-3 rounded-lg bg-indigo text-porcelain flex items-center gap-1.5 text-sm font-medium"
+                  >
+                    <ScanLine size={16} /> {t('scan.action')}
+                  </button>
+                </div>
               </div>
 
               {/* 边填边看：码画不出来当场就知道，不用等保存 */}
