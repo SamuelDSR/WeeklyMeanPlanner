@@ -3,8 +3,8 @@ import { Router } from 'express';
 import { query } from '../db.js';
 import { requireAuth, requireFamily } from '../auth.js';
 import { parseId } from '../validate.js';
-import { parseAmount, sumByCurrency, isSupportedCurrency } from '../money.js';
-import { EXPENSE_CATEGORIES } from './ledgers.js';
+import { parseAmount, sumByCurrency, splitByKind, isSupportedCurrency } from '../money.js';
+import { isValidCategory, isValidKind } from '../expenseCategories.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
@@ -20,6 +20,7 @@ function toExpenseJson(row) {
     ledgerId: row.ledger_id,
     ledgerName: row.ledger_name ?? null,
     spentOn: String(row.spent_on).slice(0, 10),
+    kind: row.kind || 'expense',
     amount: Number(row.amount),
     currency: row.currency,
     category: row.category,
@@ -34,9 +35,17 @@ router.get('/', async (req, res) => {
   const conditions = ['e.family_id = $1'];
   const values = [req.user.familyId];
 
-  if (typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)) {
-    values.push(req.query.month);
-    conditions.push(`to_char(e.spent_on, 'YYYY-MM') = $${values.length}`);
+  // period 同时支持 'YYYY'（按年）和 'YYYY-MM'（按月）
+  if (typeof req.query.period === 'string' && /^\d{4}(-\d{2})?$/.test(req.query.period)) {
+    values.push(req.query.period.length === 4 ? 'YYYY' : 'YYYY-MM');
+    values.push(req.query.period);
+    conditions.push(`to_char(e.spent_on, $${values.length - 1}) = $${values.length}`);
+  }
+
+  if (typeof req.query.kind === 'string' && req.query.kind) {
+    if (!isValidKind(req.query.kind)) return res.status(400).json({ error: '收支类型不对' });
+    values.push(req.query.kind);
+    conditions.push(`e.kind = $${values.length}`);
   }
   if (req.query.ledger === 'daily') {
     conditions.push('e.ledger_id IS NULL');
@@ -47,7 +56,8 @@ router.get('/', async (req, res) => {
     conditions.push(`e.ledger_id = $${values.length}`);
   }
   if (typeof req.query.category === 'string' && req.query.category) {
-    if (!EXPENSE_CATEGORIES.includes(req.query.category)) {
+    const forKind = isValidKind(req.query.kind) ? req.query.kind : 'expense';
+    if (!isValidCategory(req.query.category, forKind)) {
       return res.status(400).json({ error: '不认识这个分类' });
     }
     values.push(req.query.category);
@@ -68,14 +78,22 @@ router.get('/', async (req, res) => {
   const rows = result.rows;
   res.json({
     expenses: rows.map(toExpenseJson),
-    // 这一页的合计（按货币分开，绝不混着加）
-    totals: sumByCurrency(rows),
+    // 收支分开算，再给结余（各按货币分组，绝不混着加）
+    totals: splitByKind(rows),
     truncated: rows.length === limit,
   });
 });
 
-async function validateExpense(body, familyId, partial = false) {
+async function validateExpense(body, familyId, partial = false, existing = null) {
   const out = {};
+
+  // kind 要先定下来：分类合不合法取决于它（'工资' 只能是收入）
+  let kind = existing?.kind ?? 'expense';
+  if (body?.kind !== undefined) {
+    if (!isValidKind(body.kind)) return { error: '收支类型只能是 expense 或 income' };
+    kind = body.kind;
+    out.kind = kind;
+  }
 
   // 货币要先定下来：金额的小数位取决于它（日元没有小数）
   let currency = null;
@@ -93,7 +111,7 @@ async function validateExpense(body, familyId, partial = false) {
     }
     const amount = parseAmount(body?.amount, currency);
     if (amount === null) return { error: '金额填得不对，写成 12.50 或 12,50 这样' };
-    if (amount === 0) return { error: '金额不能是 0' };
+    if (amount <= 0) return { error: '金额要大于 0（是收还是支由上面的「支出/收入」决定）' };
     out.amount = amount;
   }
 
@@ -107,9 +125,12 @@ async function validateExpense(body, familyId, partial = false) {
     out.spent_on = d;
   }
 
-  if (body?.category !== undefined || !partial) {
-    const c = body?.category ?? '其他';
-    if (!EXPENSE_CATEGORIES.includes(c)) return { error: '不认识这个分类' };
+  if (body?.category !== undefined || !partial || out.kind !== undefined) {
+    // 改了收支类型但没改分类时也要重新校验：'工资' 挪到支出下面就不合法了
+    const c = body?.category ?? existing?.category ?? (kind === 'income' ? '工资' : '其他');
+    if (!isValidCategory(c, kind)) {
+      return { error: `「${c}」不是${kind === 'income' ? '收入' : '支出'}的分类` };
+    }
     out.category = c;
   }
 
@@ -165,13 +186,14 @@ router.post('/', async (req, res) => {
   }
 
   const result = await query(
-    `INSERT INTO expenses (family_id, ledger_id, spent_on, amount, currency, category, note,
+    `INSERT INTO expenses (family_id, ledger_id, spent_on, kind, amount, currency, category, note,
                            paid_by, paid_by_name, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
     [
       req.user.familyId,
       value.ledger_id ?? null,
       value.spent_on,
+      value.kind ?? 'expense',
       value.amount,
       value.currency,
       value.category,
@@ -188,10 +210,10 @@ router.patch('/:id', async (req, res) => {
   const id = parseId(req.params.id);
   if (!id) return res.status(400).json({ error: '开销 id 不合法' });
 
-  const found = await query('SELECT id FROM expenses WHERE id=$1 AND family_id=$2', [id, req.user.familyId]);
+  const found = await query('SELECT * FROM expenses WHERE id=$1 AND family_id=$2', [id, req.user.familyId]);
   if (found.rows.length === 0) return res.status(404).json({ error: '没找到这笔开销' });
 
-  const { error, value } = await validateExpense(req.body, req.user.familyId, true);
+  const { error, value } = await validateExpense(req.body, req.user.familyId, true, found.rows[0]);
   if (error) return res.status(400).json({ error });
 
   const columns = Object.keys(value);

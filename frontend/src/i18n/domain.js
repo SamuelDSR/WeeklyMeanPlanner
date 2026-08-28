@@ -86,15 +86,33 @@ const UNIT_GROUPS = {
 
 // 开销分类（expenses.category），和其它领域值一样：库里存中文，显示时翻译
 const EXPENSE_CATEGORIES = {
+  // 支出
   餐饮: { en: 'Eating out', fr: 'Restaurant' },
   食材: { en: 'Groceries', fr: 'Courses' },
-  交通: { en: 'Transport', fr: 'Transport' },
-  住宿: { en: 'Lodging', fr: 'Hébergement' },
+  日用: { en: 'Household', fr: 'Quotidien' },
   购物: { en: 'Shopping', fr: 'Achats' },
-  娱乐: { en: 'Leisure', fr: 'Loisirs' },
-  医疗: { en: 'Health', fr: 'Santé' },
+  服饰: { en: 'Clothing', fr: 'Vêtements' },
+  交通: { en: 'Transport', fr: 'Transport' },
+  住房: { en: 'Housing', fr: 'Logement' },
   居家: { en: 'Home', fr: 'Maison' },
+  娱乐: { en: 'Leisure', fr: 'Loisirs' },
+  运动: { en: 'Sport', fr: 'Sport' },
   通讯: { en: 'Phone & net', fr: 'Télécom' },
+  医疗: { en: 'Health', fr: 'Santé' },
+  孩子: { en: 'Kids', fr: 'Enfants' },
+  长辈: { en: 'Parents', fr: 'Parents' },
+  人情: { en: 'Gifts', fr: 'Cadeaux' },
+  旅行: { en: 'Travel', fr: 'Voyage' },
+  学习: { en: 'Learning', fr: 'Éducation' },
+  住宿: { en: 'Lodging', fr: 'Hébergement' },
+  // 收入
+  工资: { en: 'Salary', fr: 'Salaire' },
+  奖金: { en: 'Bonus', fr: 'Prime' },
+  兼职: { en: 'Side work', fr: 'Extra' },
+  投资: { en: 'Investment', fr: 'Placements' },
+  红包: { en: 'Gift money', fr: 'Cadeau reçu' },
+  报销: { en: 'Reimbursement', fr: 'Remboursement' },
+  退款: { en: 'Refund', fr: 'Remboursement achat' },
   其他: { en: 'Other', fr: 'Autre' },
 };
 

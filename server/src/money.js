@@ -73,3 +73,29 @@ export function groupSums(rows, keyOf, nullKey = '__none__') {
   });
   return out;
 }
+
+// 收入和支出分开算，再给出结余。
+//
+// 绝不把两者加成一个数：一个 SUM 出来是「净额」，但「这个月花了多少」
+// 和「这个月挣了多少」是两个问题，混在一起两个都答不了。
+export function splitByKind(rows) {
+  const expense = (rows || []).filter((r) => (r.kind || 'expense') === 'expense');
+  const income = (rows || []).filter((r) => r.kind === 'income');
+  const expenseTotals = sumByCurrency(expense);
+  const incomeTotals = sumByCurrency(income);
+
+  // 结余按货币逐个算。某个货币只有支出没有收入也要出现（结余是负的）
+  const currencies = new Set([
+    ...expenseTotals.map((t) => t.currency),
+    ...incomeTotals.map((t) => t.currency),
+  ]);
+  const net = Array.from(currencies)
+    .map((currency) => {
+      const inc = incomeTotals.find((t) => t.currency === currency)?.total ?? 0;
+      const exp = expenseTotals.find((t) => t.currency === currency)?.total ?? 0;
+      return { currency, total: roundMoney(inc - exp, currency) };
+    })
+    .sort((a, b) => Math.abs(b.total) - Math.abs(a.total) || a.currency.localeCompare(b.currency));
+
+  return { expense: expenseTotals, income: incomeTotals, net };
+}

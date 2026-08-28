@@ -9,16 +9,14 @@ import { Router } from 'express';
 import { query, pool } from '../db.js';
 import { requireAuth, requireFamily } from '../auth.js';
 import { parseId } from '../validate.js';
-import { parseAmount, sumByCurrency, groupSums, isSupportedCurrency, SUPPORTED_CURRENCIES } from '../money.js';
+import { sumByCurrency, groupSums, splitByKind, isSupportedCurrency, SUPPORTED_CURRENCIES } from '../money.js';
+import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../expenseCategories.js';
 
 const router = Router();
 router.use(requireAuth, requireFamily);
 
 const MAX_NAME = 40;
 const MAX_NOTE = 500;
-export const EXPENSE_CATEGORIES = [
-  '餐饮', '食材', '交通', '住宿', '购物', '娱乐', '医疗', '居家', '通讯', '其他',
-];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function toLedgerJson(row) {
@@ -56,46 +54,66 @@ async function familyCurrency(familyId) {
 
 router.get('/meta', async (req, res) => {
   res.json({
-    categories: EXPENSE_CATEGORIES,
+    // 收入和支出各一套分类，各带图标名
+    categories: { expense: EXPENSE_CATEGORIES, income: INCOME_CATEGORIES },
     currencies: SUPPORTED_CURRENCIES,
     familyCurrency: await familyCurrency(req.user.familyId),
   });
 });
 
 // ---------- 总览 ----------
-// GET /api/ledgers?month=YYYY-MM
-// 一次给全：子账本列表、每个子账本的合计、日常合计、按分类的合计。
+// GET /api/ledgers?period=2026-08 或 ?period=2026
+//
+// period 同时支持按月和按年看：家庭账最常问的两个问题就是
+// 「这个月花超了没」和「今年一共花了多少」。
 router.get('/', async (req, res) => {
   const familyId = req.user.familyId;
-  const month = typeof req.query.month === 'string' && /^\d{4}-\d{2}$/.test(req.query.month)
-    ? req.query.month
-    : null;
+  const raw = typeof req.query.period === 'string' ? req.query.period : '';
+  const period = /^\d{4}(-\d{2})?$/.test(raw) ? raw : null;
+  // 'YYYY' 比到年，'YYYY-MM' 比到月 —— 用前缀匹配，一个查询覆盖两种粒度
+  const granularity = period && period.length === 4 ? 'year' : period ? 'month' : null;
 
-  const [ledgersResult, allExpenses, monthExpenses] = await Promise.all([
-    query('SELECT * FROM ledgers WHERE family_id=$1 ORDER BY archived_at NULLS FIRST, COALESCE(starts_on, created_at::date) DESC, id DESC', [familyId]),
-    // 子账本合计要看它的全部历史，不受当前月份筛选影响 ——
-    // 「这次度假一共花了多少」跟你现在在看哪个月无关
-    query('SELECT ledger_id, amount, currency, category FROM expenses WHERE family_id=$1', [familyId]),
-    month
+  const [ledgersResult, allRows, scopeRows] = await Promise.all([
+    query(
+      `SELECT * FROM ledgers WHERE family_id=$1
+        ORDER BY archived_at NULLS FIRST, COALESCE(starts_on, created_at::date) DESC, id DESC`,
+      [familyId]
+    ),
+    // 子账本的合计要看它的**全部历史**，跟你现在在看哪个月无关 ——
+    // 「这次度假一共花了多少」不该随着月份筛选变来变去
+    query('SELECT ledger_id, amount, currency, category, kind FROM expenses WHERE family_id=$1', [familyId]),
+    period
       ? query(
-          `SELECT ledger_id, amount, currency, category FROM expenses
-            WHERE family_id=$1 AND to_char(spent_on, 'YYYY-MM') = $2`,
-          [familyId, month]
+          `SELECT ledger_id, amount, currency, category, kind FROM expenses
+            WHERE family_id=$1 AND to_char(spent_on, $2) = $3`,
+          [familyId, granularity === 'year' ? 'YYYY' : 'YYYY-MM', period]
         )
       : Promise.resolve({ rows: [] }),
   ]);
 
-  const scope = month ? monthExpenses.rows : allExpenses.rows;
+  const scope = period ? scopeRows.rows : allRows.rows;
+  const kinds = splitByKind(scope);
 
   res.json({
     ledgers: ledgersResult.rows.map(toLedgerJson),
     familyCurrency: await familyCurrency(familyId),
-    month,
-    // 当前范围（某个月，或者全部）的总计
-    totals: sumByCurrency(scope),
-    byCategory: groupSums(scope, (r) => r.category),
-    // 每个子账本的**全部历史**合计，外加没挂账本的日常
-    byLedger: groupSums(allExpenses.rows, (r) => r.ledger_id, 'daily'),
+    period,
+    granularity,
+    // 收 / 支 / 结余，各按货币分开
+    totals: kinds,
+    // 分类明细也分收支：把工资和餐饮排进同一张榜没有意义
+    byCategory: {
+      expense: groupSums(scope.filter((r) => (r.kind || 'expense') === 'expense'), (r) => r.category),
+      income: groupSums(scope.filter((r) => r.kind === 'income'), (r) => r.category),
+    },
+    // 每个子账本的全部历史合计（含日常）
+    byLedger: groupSums(allRows.rows, (r) => r.ledger_id, 'daily'),
+    byLedgerKinds: Object.fromEntries(
+      [...new Set(allRows.rows.map((r) => r.ledger_id ?? 'daily'))].map((key) => [
+        String(key),
+        splitByKind(allRows.rows.filter((r) => (r.ledger_id ?? 'daily') === key)),
+      ])
+    ),
   });
 });
 

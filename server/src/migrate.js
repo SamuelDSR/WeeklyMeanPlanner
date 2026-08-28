@@ -434,6 +434,29 @@ const MIGRATIONS = [
       ALTER TABLE families ADD COLUMN IF NOT EXISTS currency TEXT NOT NULL DEFAULT 'EUR';
     `,
   },
+  {
+    name: '014_income_and_categories',
+    sql: `
+      -- 收入。以前只能记支出，但家庭账本里工资、报销、红包也得记，
+      -- 否则「这个月剩下多少」这个问题根本答不了。
+      --
+      -- 金额一律存正数，方向由 kind 决定。用正负号表示方向的话，
+      -- 汇总时一个 SUM 就把收支混成一个数了，反而看不出花了多少。
+      ALTER TABLE expenses ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT 'expense';
+
+      DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'expenses_kind_check') THEN
+          ALTER TABLE expenses ADD CONSTRAINT expenses_kind_check
+            CHECK (kind IN ('expense', 'income'));
+        END IF;
+      END $$;
+
+      -- 以前用负数记的退款，改成正数的收入，语义更清楚
+      UPDATE expenses SET kind = 'income', amount = -amount WHERE amount < 0;
+
+      CREATE INDEX IF NOT EXISTS idx_expenses_kind ON expenses(family_id, kind, spent_on DESC);
+    `,
+  },
 ];
 
 async function isApplied(client, name) {

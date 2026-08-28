@@ -40,3 +40,28 @@ export function shiftMonth(month, delta) {
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
+
+// 期间：'2026-08'（月）或 '2026'（年）
+export function currentYear(date = new Date()) {
+  return String(date.getFullYear());
+}
+
+export function shiftPeriod(period, delta) {
+  if (/^\d{4}$/.test(period)) return String(Number(period) + delta);
+  return shiftMonth(period, delta);
+}
+
+// 不能翻到未来：还没发生的月份没有账
+export function isFuturePeriod(period, now = new Date()) {
+  if (/^\d{4}$/.test(period)) return Number(period) >= now.getFullYear() + 1;
+  return period >= shiftMonth(currentMonth(now), 1);
+}
+
+// 月 <-> 年 互相转换，切粒度时保住当前年份
+export function toGranularity(period, granularity) {
+  const year = period.slice(0, 4);
+  if (granularity === 'year') return year;
+  // 从年切回月：同一年的话停在当前月，否则停在那年的 1 月
+  const now = currentMonth();
+  return year === now.slice(0, 4) ? now : `${year}-01`;
+}

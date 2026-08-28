@@ -49,7 +49,7 @@ INSERT INTO schema_migrations (name) VALUES
   ('006_eat_out_history_ratings'), ('007_meal_likes_history_survives'),
   ('008_health_snapshot_drop_soup_slot'), ('009_family_timezone'), ('010_notifications'),
   ('011_optional_ingredients_staples'), ('012_drop_breakfast_slot'),
-  ('013_cards_and_ledgers');
+  ('013_cards_and_ledgers'), ('014_income_and_categories');
 
 -- families.owner_id -> users.id：两张表互相引用，所以等 users 建完再补这个外键
 ALTER TABLE families
@@ -278,6 +278,9 @@ CREATE TABLE expenses (
   -- 子账本删掉时开销不跟着消失，只是回到「日常」
   ledger_id    INTEGER REFERENCES ledgers(id) ON DELETE SET NULL,
   spent_on     DATE NOT NULL,
+  -- 金额一律存正数，收还是支由 kind 决定。用正负号表方向的话，
+  -- 一个 SUM 就把收支混成一个数了，看不出到底花了多少。
+  kind         TEXT NOT NULL DEFAULT 'expense',
   amount       NUMERIC(12,2) NOT NULL,
   currency     TEXT NOT NULL DEFAULT 'EUR',
   category     TEXT NOT NULL DEFAULT '其他',
@@ -286,7 +289,9 @@ CREATE TABLE expenses (
   paid_by_name TEXT,                                 -- 名字快照，人删了记录还认得
   created_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
   created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT expenses_amount_check CHECK (amount <> 0)
+  CONSTRAINT expenses_amount_check CHECK (amount <> 0),
+  CONSTRAINT expenses_kind_check CHECK (kind IN ('expense', 'income'))
 );
+CREATE INDEX idx_expenses_kind ON expenses(family_id, kind, spent_on DESC);
 CREATE INDEX idx_expenses_family_date ON expenses(family_id, spent_on DESC);
 CREATE INDEX idx_expenses_ledger ON expenses(ledger_id);

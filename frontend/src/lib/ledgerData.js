@@ -6,9 +6,10 @@ export async function fetchLedgerMeta() {
   return api.get('/ledgers/meta');
 }
 
-// 总览：子账本列表 + 各自合计 + 按分类合计。month 形如 '2026-08'，不传就是全部。
-export async function fetchLedgerOverview(month) {
-  return api.get(month ? `/ledgers?month=${month}` : '/ledgers');
+// 总览：子账本列表 + 各自合计 + 按分类合计。
+// period 形如 '2026-08'（按月）或 '2026'（按年），不传就是全部。
+export async function fetchLedgerOverview(period) {
+  return api.get(period ? `/ledgers?period=${period}` : '/ledgers');
 }
 
 export async function createLedger(data) {
@@ -24,7 +25,7 @@ export async function deleteLedger(id) {
   return api.delete(`/ledgers/${id}`);
 }
 
-// filters: { month, ledger: id | 'daily', category, limit }
+// filters: { period, kind, ledger: id | 'daily', category, limit }
 export async function fetchExpenses(filters = {}) {
   const params = new URLSearchParams();
   Object.entries(filters).forEach(([k, v]) => {
