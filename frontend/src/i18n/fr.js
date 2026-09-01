@@ -288,6 +288,8 @@ export default {
     noCards: 'Aucune carte',
   },
   scan: {
+    torch: 'Éclairage',
+    stuckHint: 'Rien ne passe ? Rapprochez-vous pour que le code remplisse le cadre, et éclairez bien — les lignes du PDF417 sont serrées et floutent vite.',
     action: 'Scanner',
     title: 'Visez le code-barres',
     starting: 'Ouverture de la caméra…',

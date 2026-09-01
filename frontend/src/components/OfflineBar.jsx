@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { CloudOff, RefreshCw, AlertTriangle, X } from 'lucide-react';
 import { subscribeSync, flushQueue, failedOps, clearFailed } from '../lib/syncQueue';
 import { useI18n } from '../i18n';
-import { useAuth } from '../context/AuthContext';
+import { subscribeReachability } from '../lib/reachability';
 
 // 顶部的离线/待同步提示条。
 //
@@ -12,11 +12,13 @@ export default function OfflineBar() {
   const { t } = useI18n();
   // navigator.onLine 只说明「有没有网卡连着」，不代表**够得着服务器**。
   // 实测：冷启动时它报 true，而请求全部 Failed to fetch（弱信号、强制门户、
-  // 服务器挂了都是这样）。所以以「我们自己的请求失败了」为准，
-  // navigator.onLine === false 只当作一个确定性的补充信号。
-  const { offline: unreachable } = useAuth();
+  // 服务器挂了都是这样）。所以以「我们自己的请求成没成功」为准。
+  //
+  // 这个信号由 lib/reachability 维护，**每个请求**都会更新它 ——
+  // 只要有一个请求成功，提示条就自己消失，不会卡在离线状态下不来。
   const [navOnline, setNavOnline] = useState(() => navigator.onLine !== false);
-  const online = navOnline && !unreachable;
+  const [reachable, setReachable] = useState(true);
+  const online = navOnline && reachable;
   const [sync, setSync] = useState({ pending: 0, failed: [] });
   const [showFailed, setShowFailed] = useState(false);
 
@@ -32,6 +34,7 @@ export default function OfflineBar() {
   }, []);
 
   useEffect(() => subscribeSync(setSync), []);
+  useEffect(() => subscribeReachability(setReachable), []);
 
   const failed = sync.failed || [];
 

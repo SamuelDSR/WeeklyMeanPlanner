@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { readCache, writeCache, clearAllCache, isNetworkError } from '../lib/localCache';
+import { subscribeReachability } from '../lib/reachability';
 
 const AuthContext = createContext(null);
 
@@ -20,24 +21,62 @@ export function AuthProvider({ children }) {
       setUser(user);
       setFamily(user.family || null);
       writeCache(ME_CACHE, user);
-      setOffline(false);
     } catch (err) {
       // 断网 != 未登录。cookie 还是好的，只是暂时够不着服务器 ——
       // 这时候把人踢到登录页，等于地铁里一打开应用就什么都看不了。
       if (isNetworkError(err) && readCache(ME_CACHE)) {
-        setOffline(true);
-        return; // 保持上次的身份不动
+        return; // 断网：保持上次的身份不动（offline 由 reachability 统一置）
       }
       // 服务器明确说不行（401 / 403 / 账号被删）才真的退出
       setUser(null);
       setFamily(null);
       clearAllCache();
-      setOffline(false);
     }
   }
 
   useEffect(() => {
     refreshMe();
+  }, []);
+
+  // 「在不在线」交给 reachability 统一判断：任何一个请求成功都能把它拨回在线。
+  //
+  // 以前这个状态只由挂载时那一次 /auth/me 决定 —— iOS 上装到桌面后冷启动，
+  // 网络栈还没就绪，第一次请求必然失败，提示条就永远挂在那儿了，
+  // 哪怕后面所有请求都是好的。
+  useEffect(() => subscribeReachability((ok) => setOffline(!ok)), []);
+
+  // 掉线期间每 20 秒探一次。
+  //
+  // 光靠「回到前台」和 online 事件不够：应用一直开着、网络自己恢复的场景
+  // （地铁出站、Wi-Fi 重连）不会触发任何事件，没有心跳就会一直挂着离线提示。
+  // 只在离线时探，恢复了就停 —— 在线时白发请求没意义。
+  useEffect(() => {
+    if (!offline) return undefined;
+    // 先密后疏：3s、6s、12s，之后每 20s 一次。
+    // 网络只是抖了一下的话几秒就恢复显示，真断网了也不会一直空转。
+    let delay = 3000;
+    let timer;
+    const tick = () => {
+      if (document.visibilityState === 'visible') refreshMe();
+      delay = Math.min(delay * 2, 20000);
+      timer = setTimeout(tick, delay);
+    };
+    timer = setTimeout(tick, delay);
+    return () => clearTimeout(timer);
+  }, [offline]);
+
+  // 回到前台 / 重新联网时再确认一次身份。
+  // 放着不管的话，管理员在服务端改了权限、或者账号被停用，这边一直不知道。
+  useEffect(() => {
+    const recheck = () => {
+      if (document.visibilityState === 'visible') refreshMe();
+    };
+    window.addEventListener('online', recheck);
+    document.addEventListener('visibilitychange', recheck);
+    return () => {
+      window.removeEventListener('online', recheck);
+      document.removeEventListener('visibilitychange', recheck);
+    };
   }, []);
 
   // 注册出来的账号默认是"待审核"，这时候后端不会发 cookie、也没有 user，

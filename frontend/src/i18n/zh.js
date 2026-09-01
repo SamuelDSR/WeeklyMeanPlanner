@@ -277,6 +277,8 @@ export default {
     noCards: '还没有卡',
   },
   scan: {
+    torch: '补光',
+    stuckHint: '还没扫到？把卡拿近些让码占满取景框，光线要足；PDF417 行很密，糊一点就读不出。',
     action: '扫一扫',
     title: '对着卡上的条码',
     starting: '正在打开相机…',

@@ -288,6 +288,8 @@ export default {
     noCards: 'No cards yet',
   },
   scan: {
+    torch: 'Light',
+    stuckHint: 'Not catching? Move closer so the code fills the frame, and get more light on it — PDF417 rows are dense and blur easily.',
     action: 'Scan',
     title: 'Point at the barcode',
     starting: 'Opening the camera…',
